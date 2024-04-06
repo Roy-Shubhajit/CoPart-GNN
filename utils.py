@@ -5,6 +5,14 @@ from graph_coarsening.coarsening_utils import *
 from torch_geometric.datasets import Coauthor
 from torch_geometric.datasets import CitationFull
 
+def create_distribution_tensor(input_tensor, class_count):
+    if input_tensor.dtype != torch.int64:
+        input_tensor = input_tensor.long()
+    distribution_tensor = torch.zeros(class_count, dtype=torch.int64)
+    unique_classes, counts = input_tensor.unique(return_counts=True)
+    distribution_tensor[unique_classes-1] = counts
+    return distribution_tensor
+
 def one_hot(x, class_count):
     return torch.eye(class_count)[x, :]
 
@@ -105,7 +113,7 @@ def splits(data, num_classes, exp):
 
     return data
 
-def load_data(dataset, candidate, C_list, Gc_list, exp):
+def load_data(dataset, candidate, C_list, Gc_list, exp, map_list):
     if dataset == 'dblp':
         dataset = CitationFull(root='./dataset', name=dataset)
     elif dataset == 'Physics':
@@ -136,6 +144,9 @@ def load_data(dataset, candidate, C_list, Gc_list, exp):
         H_labels = labels[keep]
         H_train_mask = train_mask[keep]
         H_val_mask = val_mask[keep]
+        ###########################
+        #create the subgraphs for each H here using map_list
+        ###########################
         if len(H.info['orig_idx']) > 10 and torch.sum(H_train_mask)+torch.sum(H_val_mask) > 0:
             train_labels = one_hot(H_labels, n_classes)
             train_labels[~H_train_mask] = torch.Tensor([0 for _ in range(n_classes)])
@@ -157,9 +168,9 @@ def load_data(dataset, candidate, C_list, Gc_list, exp):
             new_val_mask[mix_mask > 1] = False
 
             coarsen_features = torch.cat([coarsen_features, torch.FloatTensor(C.dot(H_features))], dim=0)
-            coarsen_train_labels = torch.cat([coarsen_train_labels, torch.argmax(torch.FloatTensor(C.dot(train_labels)), dim=1).float()], dim=0)
+            coarsen_train_labels = torch.cat([coarsen_train_labels, torch.argmax(torch.FloatTensor(C.dot(train_labels)), dim=1).float()], dim=0) #we need to replace labels here to n_class dimensional vector
             coarsen_train_mask = torch.cat([coarsen_train_mask, new_train_mask], dim=0)
-            coarsen_val_labels = torch.cat([coarsen_val_labels, torch.argmax(torch.FloatTensor(C.dot(val_labels)), dim=1).float()], dim=0)
+            coarsen_val_labels = torch.cat([coarsen_val_labels, torch.argmax(torch.FloatTensor(C.dot(val_labels)), dim=1).float()], dim=0) #we need to replace labels here to n_class dimensional vector
             coarsen_val_mask = torch.cat([coarsen_val_mask, new_val_mask], dim=0)
 
             if coarsen_row is None:
@@ -172,12 +183,12 @@ def load_data(dataset, candidate, C_list, Gc_list, exp):
                 coarsen_col = np.concatenate([coarsen_col, current_col], axis=0)
             coarsen_node += Gc.W.shape[0]
 
-        elif torch.sum(H_train_mask)+torch.sum(H_val_mask)>0:
+        elif torch.sum(H_train_mask)+torch.sum(H_val_mask)>0: #Maybe we need to change this statement to else only
 
             coarsen_features = torch.cat([coarsen_features, H_features], dim=0)
-            coarsen_train_labels = torch.cat([coarsen_train_labels, H_labels.float()], dim=0)
+            coarsen_train_labels = torch.cat([coarsen_train_labels, H_labels.float()], dim=0) #we need to replace labels here to n_class dimensional vector
             coarsen_train_mask = torch.cat([coarsen_train_mask, H_train_mask], dim=0)
-            coarsen_val_labels = torch.cat([coarsen_val_labels, H_labels.float()], dim=0)
+            coarsen_val_labels = torch.cat([coarsen_val_labels, H_labels.float()], dim=0) #we need to replace labels here to n_class dimensional vector
             coarsen_val_mask = torch.cat([coarsen_val_mask, H_val_mask], dim=0)
 
             if coarsen_row is None:

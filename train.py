@@ -4,8 +4,15 @@ import torch
 from torch import tensor
 from network import Net1, Net2
 import numpy as np
-from utils import load_data, coarsening
+from utils import load_data, coarsening, create_distribution_tensor
 import os
+
+def new_loss_fn(out, y, class_dist):
+    add_tnesor = torch.tensor([], dtype=torch.float32)
+    for i in range(len(class_dist)):
+        new_add = torch.abs(class_dist[i] - torch.sum(out.T[i]))/len(out)
+        add_tnesor = torch.cat((add_tnesor, new_add), 0)
+    return F.nll_loss(out, y) + torch.sum(add_tnesor)
 
 def train_M1(model, x, edge_index, mask, y, loss_fn, optimizer):
     model.train()
@@ -30,8 +37,9 @@ def train_M2(model, graphs, E_meta, loss_fn, optimizer):
         x = graph.x.to(device)
         edge_index = graph.edge_index.to(device)
         E_meta = E_meta[graph.idx].to(device)
+        class_dist = create_distribution_tensor(graph.y, graph.num_classes)
         out = model(x, edge_index, E_meta)
-        loss = loss_fn(out[graph.train_mask], graph.y[graph.train_mask])
+        loss = loss_fn(out[graph.train_mask], graph.y[graph.train_mask], class_dist)
         loss.backward()
         optimizer.step()
         total_loss += loss.item()
@@ -46,13 +54,14 @@ def infer_M2(model, graphs, E_meta, loss_fn, metric_fn, infer_type):
         x = graph.x.to(device)
         edge_index = graph.edge_index.to(device)
         E_meta = E_meta[graph.idx].to(device)
+        class_dist = create_distribution_tensor(graph.y, graph.num_classes)
         out = model(x, edge_index, E_meta)
         if infer_type == 'test':
-            loss = loss_fn(out[graph.test_mask], graph.y[graph.test_mask])
+            loss = loss_fn(out[graph.test_mask], graph.y[graph.test_mask], class_dist)
             all_out.append(out[graph.test_mask])
             all_label.append(graph.y[graph.test_mask])
         else:
-            loss = loss_fn(out[graph.val_mask], graph.y[graph.val_mask])
+            loss = loss_fn(out[graph.val_mask], graph.y[graph.val_mask], class_dist)
             all_out.append(out[graph.val_mask])
             all_label.append(graph.y[graph.val_mask])
         total_loss += loss.item()
@@ -70,6 +79,8 @@ if __name__ == '__main__':
     parser.add_argument('--hidden', type=int, default=64)
     parser.add_argument('--epochs1', type=int, default=60)
     parser.add_argument('--epochs2', type=int, default=100)
+    parser.add_argument('--num_layers1', type=int, default=2)
+    parser.add_argument('--num_layers2', type=int, default=2)
     parser.add_argument('--early_stopping', type=int, default=10)
     parser.add_argument('--lr', type=float, default=0.01)
     parser.add_argument('--weight_decay', type=float, default=0.0005)
@@ -113,8 +124,8 @@ if __name__ == '__main__':
         val_loss_history_M1 = []
         val_loss_history_M2  = []
         for epoch in range(args.epochs1):
-            train_loss = train_M1(model1, coarsen_features, coarsen_edge, coarsen_train_mask, coarsen_train_labels, F.nll_loss, optimizer1)
-            E_meta, val_loss, val_acc = infer_M1(model1, coarsen_features, coarsen_edge, coarsen_val_mask, coarsen_val_labels, F.nll_loss, metric_fn=lambda x, y: int(x.max(1)[1].eq(y).sum().item()) / int(y.sum()))
+            train_loss = train_M1(model1, coarsen_features, coarsen_edge, coarsen_train_mask, coarsen_train_labels, F.l1_loss, optimizer1)
+            E_meta, val_loss, val_acc = infer_M1(model1, coarsen_features, coarsen_edge, coarsen_val_mask, coarsen_val_labels, F.l1_loss, metric_fn=lambda x, y: int(x.max(1)[1].eq(y).sum().item()) / int(y.sum()))
 
             if val_loss < best_val_loss_M1:
                 best_val_loss_M1 = val_loss
@@ -125,10 +136,10 @@ if __name__ == '__main__':
         
         for epoch in range(args.epochs2):
             model1.load_state_dict(torch.load(path + 'checkpoint-best-loss-model-1.pkl'))
-            E_meta, val_loss, val_acc = infer_M1(model1, coarsen_features, coarsen_edge, coarsen_val_mask, coarsen_val_labels, F.nll_loss, metric_fn=lambda x, y: int(x.max(1)[1].eq(y).sum().item()) / int(y.sum()))
+            E_meta, val_loss, val_acc = infer_M1(model1, coarsen_features, coarsen_edge, coarsen_val_mask, coarsen_val_labels, F.l1_loss, metric_fn=lambda x, y: int(x.max(1)[1].eq(y).sum().item()) / int(y.sum()))
 
-            train_loss = train_M2(model2, graphs, E_meta, F.nll_loss, optimizer2)
-            val_loss, val_acc = infer_M2(model2, graphs, E_meta, F.nll_loss, metric_fn=lambda x, y: int(x.max(1)[1].eq(y).sum().item()) / int(y.sum()), infer_type='val')
+            train_loss = train_M2(model2, graphs, E_meta, new_loss_fn, optimizer2)
+            val_loss, val_acc = infer_M2(model2, graphs, E_meta, new_loss_fn, metric_fn=lambda x, y: int(x.max(1)[1].eq(y).sum().item()) / int(y.sum()), infer_type='val')
 
             if val_loss < best_val_loss_M2:
                 best_val_loss_M2 = val_loss
@@ -138,7 +149,7 @@ if __name__ == '__main__':
 
         model1.load_state_dict(torch.load(path + 'checkpoint-best-loss-model-1.pkl'))
         model2.load_state_dict(torch.load(path + 'checkpoint-best-loss-model-2.pkl'))
-        test_loss, test_acc = infer_M2(model2, graphs, E_meta, F.nll_loss, metric_fn=lambda x, y: int(x.max(1)[1].eq(y).sum().item()) / int(y.sum()), infer_type='test')
+        test_loss, test_acc = infer_M2(model2, graphs, E_meta, new_loss_fn, metric_fn=lambda x, y: int(x.max(1)[1].eq(y).sum().item()) / int(y.sum()), infer_type='test')
         all_acc.append(test_acc)
 
     print('ave_acc: {:.4f}'.format(np.mean(all_acc)), '+/- {:.4f}'.format(np.std(all_acc)))
