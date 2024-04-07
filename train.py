@@ -4,7 +4,7 @@ import torch
 from torch import tensor
 from network import Net1, Net2
 import numpy as np
-from utils import load_data, coarsening, create_distribution_tensor, create_data
+from utils import load_data, coarsening, create_distribution_tensor
 import os
 
 def new_loss_fn(out, y, class_dist):
@@ -93,9 +93,10 @@ if not os.path.isdir(path):
     os.mkdir(path)
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-args.num_features, args.num_classes, candidate, C_list, Gc_list, map_list = coarsening(args.dataset, 1-args.coarsening_ratio, args.coarsening_method)
+args.num_features, args.num_classes, candidate, C_list, Gc_list, map_list, inv_map_list, data_list = coarsening(args.dataset, 1-args.coarsening_ratio, args.coarsening_method)
 
-# print(map_list)
+print(f"Inverse Map List: {inv_map_list}\n")
+print(f"Data list: {data_list}\n")
 
 
 # model1 = Net1(args).to(device)

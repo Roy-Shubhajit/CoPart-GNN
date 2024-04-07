@@ -67,6 +67,7 @@ def coarsen(
     Gall.append(G)
 
     for level in range(1, max_levels + 1):
+        # print(f"Level {level}")
 
         G = Gc
         mapping_dict = {}
@@ -137,17 +138,12 @@ def coarsen(
 
         if not hasattr(G, "coords"):
             Gc = gsp.graphs.Graph(Wc)
-            # print("here")
         else:
             Gc = gsp.graphs.Graph(Wc, coords=coarsen_vector(G.coords, iC))
         
-        # print(level, G.coords)
-        # print(level, Gc.coords)
-        # print(G.info)
-        
-
         Gall.append(Gc)
-        print(level, coarsening_list)
+        # print(f"Level {level} -> Coarsening List: {coarsening_list}\n")
+
         n = Gc.N
         new_num = 0
         in_list = False

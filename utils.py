@@ -5,6 +5,8 @@ from graph_coarsening.coarsening_utils import *
 from torch_geometric.datasets import Coauthor
 from torch_geometric.datasets import CitationFull, KarateClub
 from torch_geometric.data import Data
+import networkx as nx
+from torch_geometric.utils import from_scipy_sparse_matrix
 
 def create_distribution_tensor(input_tensor, class_count):
     if input_tensor.dtype != torch.int64:
@@ -60,28 +62,79 @@ def subgraph_mapping(map_dict):
         subgraph_mapping[i] = new_map
     return subgraph_mapping
 
-
-def create_data(map_list, data):
-    # print("x values")
-    # print(data.x)
-    data_list = [] # This is a list of lists
+def metanode_to_node_mapping(map_list:list) -> list:
+    '''
+    Returns a list of dictionaries (each dictionary corresponds to a distinct disconnected component in original graph) containing (`metanode` [key] : list(`node`) [values]) pairs.
+    It is essentially an inverse mapping of `map_list`.
+    ---
+    Parameters
+    ----------
+    map_list :
+        List of dictionaries (each dictionary corresponds to a distinct disconnected component in original graph) containing (`node` [key] : `metanode` [value]) pairs.
+    
+    Returns
+    -------
+    inv_map_list :
+        Inverse mapping of map_list.
+    '''
+    inv_map_list = []
     for subgraph in map_list:
-        subgraph_list = []
-        # print("subgraph values",subgraph.values())
-        # print("Here")
-        for i in range(len(set(subgraph.values()))):
-            x_temp = []
-            y_temp = []
-            for node, metanode in subgraph.items():
-                if(metanode==i):
-                    x_temp.append(data.x[node])
-                    y_temp.append(data.y[node].item())
-            # print("x_temp")
-            # print(torch.stack(x_temp))
-            subgraph_list.append(Data(x = torch.stack(x_temp), y=torch.tensor(y_temp)))
-        # print(subgraph_list[0].x)
-        data_list.append(subgraph_list)
-    # print(data_list)
+        temp = dict()
+        for node, metanode in subgraph.items():
+            if metanode not in set(temp.keys()):
+                temp[metanode] = [node]
+            else:
+                temp[metanode].append(node)
+        inv_map_list.append(temp)
+    return inv_map_list
+
+def create_data(inv_map_list:list, data:Data, Gc_list:list) -> list:
+    '''
+    Returns a list of `torch_geometric.data.Data` type objects (each object corresponds to the coarsened version of distinct disconnected component in original graph)
+    containing `edge_index` between metanodes, `node_features` and `node_labels`.
+    ---
+    Parameters
+    ----------
+    inv_map_list :
+        Inverse mapping of map_list.
+    
+    data :
+        `torch_geometric.data.Data` type object of the original graph. Must contain `x` and `y` as attributes.
+    
+    Gc_list :
+        List of `gsp.graphs.Graph` type objects. Each object is a coarsened version of a `component` of the original graph.
+   
+    Returns
+    -------
+    data_list :
+        List of `torch_geometric.data.Data` type objects (each object corresponds to the coarsened version of distinct disconnected component in original graph)
+        Each object has the following attributes:
+
+        `edge_index` :
+                    `torch.tensor` type object containing the undirected edges between metanodes for the particular graph object.
+        `node_features` :
+                List of metanode features for the particular graph object. Each entry is the features of those node of the original graph which are mapped to the particular metanode.
+                For example, if nodes [5, 6, 16] are mapped to metanode 2, i.e., 2: [5, 6, 16], then `data_list.node_features[2]` would be the ordered combined features of nodes [5, 6, 16]\n
+                of shape (3 x f), where f is the number of features of any node in original graph.
+        `node_labels` :
+                List of metanode labels for the particular graph object. Each entry is the labels of those node of the original graph which are mapped to the particular metanode.
+                For example, if nodes [5, 6, 16] are mapped to metanode 2, i.e., 2: [5, 6, 16], then `data_list.node_labels[2]` would be the ordered combined labels of nodes [5, 6, 16]\n
+                of shape (3 x g), where g is the size of the vector used to define the label of any node in original graph.
+    '''
+    # print(f"Feature Matrix of original graph:\n{data.x}\n")
+    data_list = []
+    for idx, component in enumerate(inv_map_list):
+        subgraph = Data(edge_index = from_scipy_sparse_matrix(Gc_list[idx].W)[0])
+        x = []
+        y = []
+        # print(f"Subgraph {idx}: {component}\n")
+        for indices in component.values():
+            x.append(data.x[indices])
+            y.append(data.y[indices])
+        subgraph.node_features, subgraph.node_labels = x, y
+        # print(f"X: {subgraph.node_features}")
+        # print(f"Y: {subgraph.node_labels}")
+        data_list.append(subgraph)
     return data_list
 
 def coarsening(dataset, coarsening_ratio, coarsening_method):
@@ -109,9 +162,35 @@ def coarsening(dataset, coarsening_ratio, coarsening_method):
             C_list.append(C)
             Gc_list.append(Gc)
             map_list.append(subgraph_mapping(mapping_dict_list))
+
+            # #######
+            # print(f"Length of Gall: {len(Gall)}\n")
+            # for level, graph in enumerate(Gall):
+            #     plt.figure()
+            #     nx_graph = nx.Graph(graph.W.toarray())
+            #     print(graph.W.toarray(), graph.W.toarray().shape)
+            #     print(from_scipy_sparse_matrix(graph.W)[0], from_scipy_sparse_matrix(graph.W)[0].shape)
+            #     pos = nx.spring_layout(nx_graph)
+            #     nx.draw(nx_graph, pos, with_labels=True)
+            #     plt.axis('equal')
+            #     plt.title(f"Subgraph {number} Level {level}")
+            #     plt.show()
+            
+            # plt.figure()
+            # nx_graph = nx.Graph(Gc.W.toarray())
+            # print(Gc.W.toarray(), Gc.W.toarray().shape)
+            # print(from_scipy_sparse_matrix(Gc.W)[0], from_scipy_sparse_matrix(Gc.W)[0].shape)
+            # pos = nx.spring_layout(nx_graph)
+            # nx.draw(nx_graph, pos, with_labels=True)
+            # plt.axis('equal')
+            # plt.title(f"Gc")
+            # plt.show()
+            # #######
+
         number += 1
-    create_data(map_list, data)
-    return data.x.shape[1], len(set(np.array(data.y))), candidate, C_list, Gc_list, map_list
+    inv_map_list = metanode_to_node_mapping(map_list)
+    # print(inv_map_list)
+    return data.x.shape[1], len(set(np.array(data.y))), candidate, C_list, Gc_list, map_list, inv_map_list, create_data(inv_map_list, data, Gc_list)
 
 def index_to_mask(index, size):
     mask = torch.zeros(size, dtype=torch.bool, device=index.device)
