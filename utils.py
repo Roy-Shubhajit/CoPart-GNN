@@ -3,7 +3,8 @@ import torch
 from torch_geometric.utils import to_dense_adj
 from graph_coarsening.coarsening_utils import *
 from torch_geometric.datasets import Coauthor
-from torch_geometric.datasets import CitationFull
+from torch_geometric.datasets import CitationFull, KarateClub
+from torch_geometric.data import Data
 
 def create_distribution_tensor(input_tensor, class_count):
     if input_tensor.dtype != torch.int64:
@@ -59,11 +60,37 @@ def subgraph_mapping(map_dict):
         subgraph_mapping[i] = new_map
     return subgraph_mapping
 
+
+def create_data(map_list, data):
+    # print("x values")
+    # print(data.x)
+    data_list = [] # This is a list of lists
+    for subgraph in map_list:
+        subgraph_list = []
+        # print("subgraph values",subgraph.values())
+        # print("Here")
+        for i in range(len(set(subgraph.values()))):
+            x_temp = []
+            y_temp = []
+            for node, metanode in subgraph.items():
+                if(metanode==i):
+                    x_temp.append(data.x[node])
+                    y_temp.append(data.y[node].item())
+            # print("x_temp")
+            # print(torch.stack(x_temp))
+            subgraph_list.append(Data(x = torch.stack(x_temp), y=torch.tensor(y_temp)))
+        # print(subgraph_list[0].x)
+        data_list.append(subgraph_list)
+    # print(data_list)
+    return data_list
+
 def coarsening(dataset, coarsening_ratio, coarsening_method):
     if dataset == 'dblp':
         dataset = CitationFull(root='./dataset', name=dataset)
     elif dataset == 'Physics':
         dataset = Coauthor(root='./dataset/Physics', name=dataset)
+    elif dataset == 'KarateClub':
+        dataset = KarateClub()
     else:
         dataset = Planetoid(root='./dataset', name=dataset)
     data = dataset[0]
@@ -83,6 +110,7 @@ def coarsening(dataset, coarsening_ratio, coarsening_method):
             Gc_list.append(Gc)
             map_list.append(subgraph_mapping(mapping_dict_list))
         number += 1
+    create_data(map_list, data)
     return data.x.shape[1], len(set(np.array(data.y))), candidate, C_list, Gc_list, map_list
 
 def index_to_mask(index, size):
@@ -209,4 +237,4 @@ def load_data(dataset, candidate, C_list, Gc_list, exp, map_list):
 
     return data, coarsen_features, coarsen_train_labels, coarsen_train_mask, coarsen_val_labels, coarsen_val_mask, coarsen_edge
 
-
+    

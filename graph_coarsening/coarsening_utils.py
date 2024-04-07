@@ -137,10 +137,17 @@ def coarsen(
 
         if not hasattr(G, "coords"):
             Gc = gsp.graphs.Graph(Wc)
+            # print("here")
         else:
             Gc = gsp.graphs.Graph(Wc, coords=coarsen_vector(G.coords, iC))
-        Gall.append(Gc)
+        
+        # print(level, G.coords)
+        # print(level, Gc.coords)
+        # print(G.info)
+        
 
+        Gall.append(Gc)
+        print(level, coarsening_list)
         n = Gc.N
         new_num = 0
         in_list = False
@@ -556,7 +563,7 @@ def contract_variation_linear(G, A=None, K=10, r=0.5, mode="neighborhood"):
             return self.cost < other.cost
 
     family = []
-    W_bool = G.A + sp.sparse.eye(G.N, dtype=np.bool, format="csr")
+    W_bool = G.A + sp.sparse.eye(G.N, dtype=bool, format="csr")
     if "neighborhood" in mode:
         for i in range(N):
             # i_set = G.A[i,:].indices # graph_utils.get_neighbors(G, i)
@@ -589,7 +596,7 @@ def contract_variation_linear(G, A=None, K=10, r=0.5, mode="neighborhood"):
                 family.append(CandidateSet(triangle))
 
     family = SortedList(family)
-    marked = np.zeros(G.N, dtype=np.bool)
+    marked = np.zeros(G.N, dtype=bool)
 
     # ----------------------------------------------------------------------------
     # Construct a (minimum weight) independent set.
@@ -950,7 +957,7 @@ def matching_greedy(G, weights, r=0.4):
     matching = []
 
     # which vertices have been selected
-    marked = np.zeros(N, dtype=np.bool)
+    marked = np.zeros(N, dtype=bool)
 
     n, n_target = N, (1 - r) * N
     while len(candidate_edges) > 0:
