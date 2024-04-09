@@ -36,7 +36,7 @@ def train_M2(model, graphs, E_meta, loss_fn, optimizer):
         optimizer.zero_grad()
         x = graph.x.to(device)
         edge_index = graph.edge_index.to(device)
-        E_meta = E_meta[graph.idx].to(device)
+        E_meta = E_meta[graph.meta_idx].to(device)
         class_dist = create_distribution_tensor(graph.y, graph.num_classes)
         out = model(x, edge_index, E_meta)
         loss = loss_fn(out[graph.train_mask], graph.y[graph.train_mask], class_dist)
@@ -53,7 +53,7 @@ def infer_M2(model, graphs, E_meta, loss_fn, metric_fn, infer_type):
         model.eval()
         x = graph.x.to(device)
         edge_index = graph.edge_index.to(device)
-        E_meta = E_meta[graph.idx].to(device)
+        E_meta = E_meta[graph.meta_idx].to(device)
         class_dist = create_distribution_tensor(graph.y, graph.num_classes)
         out = model(x, edge_index, E_meta)
         if infer_type == 'test':
@@ -123,6 +123,7 @@ if __name__ == '__main__':
         best_val_loss_M2 = float('inf')
         val_loss_history_M1 = []
         val_loss_history_M2  = []
+        #training Model 1
         for epoch in range(args.epochs1):
             train_loss = train_M1(model1, coarsen_features, coarsen_edge, coarsen_train_mask, coarsen_train_labels, F.l1_loss, optimizer1)
             E_meta, val_loss, val_acc = infer_M1(model1, coarsen_features, coarsen_edge, coarsen_val_mask, coarsen_val_labels, F.l1_loss, metric_fn=lambda x, y: int(x.max(1)[1].eq(y).sum().item()) / int(y.sum()))
@@ -133,7 +134,7 @@ if __name__ == '__main__':
             val_loss_history_M1.append(val_loss)
             if epoch > args.early_stopping and val_loss_history_M1[-1] > val_loss_history_M1[-args.early_stopping]:
                 break
-        
+        #training Model 2
         for epoch in range(args.epochs2):
             model1.load_state_dict(torch.load(path + 'checkpoint-best-loss-model-1.pkl'))
             E_meta, val_loss, val_acc = infer_M1(model1, coarsen_features, coarsen_edge, coarsen_val_mask, coarsen_val_labels, F.l1_loss, metric_fn=lambda x, y: int(x.max(1)[1].eq(y).sum().item()) / int(y.sum()))
@@ -146,9 +147,10 @@ if __name__ == '__main__':
                 torch.save(model2.state_dict(), path + 'checkpoint-best-loss-model-2.pkl')
             if epoch > args.early_stopping and val_loss_history_M2[-1] > val_loss_history_M2[-args.early_stopping]:
                 break
-
+        #testing Model 1 and 2
         model1.load_state_dict(torch.load(path + 'checkpoint-best-loss-model-1.pkl'))
         model2.load_state_dict(torch.load(path + 'checkpoint-best-loss-model-2.pkl'))
+        E_meta, test_loss, test_acc = infer_M1(model1, data.x, data.edge_index, data.test_mask, data.y, F.l1_loss, metric_fn=lambda x, y: int(x.max(1)[1].eq(y).sum().item()) / int(y.sum()))
         test_loss, test_acc = infer_M2(model2, graphs, E_meta, new_loss_fn, metric_fn=lambda x, y: int(x.max(1)[1].eq(y).sum().item()) / int(y.sum()), infer_type='test')
         all_acc.append(test_acc)
 
