@@ -82,6 +82,7 @@ if __name__ == '__main__':
     parser.add_argument('--num_layers1', type=int, default=2)
     parser.add_argument('--num_layers2', type=int, default=2)
     parser.add_argument('--early_stopping', type=int, default=10)
+    parser.add_argument('--extra_node', type=bool, default=False)
     parser.add_argument('--lr', type=float, default=0.01)
     parser.add_argument('--weight_decay', type=float, default=0.0005)
     parser.add_argument('--normalize_features', type=bool, default=True)
@@ -100,7 +101,7 @@ if __name__ == '__main__':
 
     for i in range(args.runs):
 
-        data, coarsen_features, coarsen_train_labels, coarsen_train_mask, coarsen_val_labels, coarsen_val_mask, coarsen_edge, graphs = load_data(
+        data, coarsen_features, coarsen_train_labels, coarsen_train_mask, coarsen_val_labels, coarsen_val_mask, coarsen_edge, graphs = load_data(args, 
             args.dataset, candidate, C_list, Gc_list, args.experiment, map_list)
         data = data.to(device)
         coarsen_features = coarsen_features.to(device)
