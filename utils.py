@@ -176,7 +176,7 @@ def load_data(args, dataset, candidate, C_list, Gc_list, exp, map_list):
                 value = list(set(value))
             subgraph_edges = subgraph(edge_index=data.edge_index, subset=torch.LongTensor(value), relabel_nodes=True)
             subgraph_edges = subgraph_edges[0]
-            M = Data(edge_index=subgraph_edges, x=data.x[value], y=data.y[value], mapping_dict={int(value): i for i, value in enumerate(value)}, meta_idx=key+coarsen_node)
+            M = Data(edge_index=subgraph_edges, x=data.x[value], y=data.y[value], mapping_dict={int(v): i for i, v in enumerate(value)}, meta_idx=key+coarsen_node)
             M.train_mask = torch.zeros(len(value), dtype=torch.bool)
             M.val_mask = torch.zeros(len(value), dtype=torch.bool)
             M.test_mask = torch.zeros(len(value), dtype=torch.bool)
