@@ -61,13 +61,13 @@ def subgraph_mapping(map_dict):
         subgraph_mapping[i] = new_map
     return subgraph_mapping
 
-def metanode_to_node_mapping(map_dict):
+def metanode_to_node_mapping(map_dict, prev_nodes):
     temp = dict()
     for node, metanode in map_dict.items():
         if metanode not in set(temp.keys()):
-            temp[metanode] = [node]
+            temp[metanode] = [node+prev_nodes]
         else:
-            temp[metanode].append(node)
+            temp[metanode].append(node+prev_nodes)
     return temp
 
 def coarsening(dataset, coarsening_ratio, coarsening_method):
@@ -159,11 +159,11 @@ def load_data(dataset, candidate, C_list, Gc_list, exp, map_list):
         H_train_mask = train_mask[keep]
         H_val_mask = val_mask[keep]
 
-        inv_map = metanode_to_node_mapping(mapping_dict)
+        inv_map = metanode_to_node_mapping(mapping_dict, coarsen_node)
         for key, value in inv_map.items():
             subgraph_edges = subgraph(edge_index=data.edge_index, subset=torch.LongTensor(value), relabel_nodes=True)
             subgraph_edges = subgraph_edges[0]
-            M = Data(edge_index=subgraph_edges, x=data.x[value], y=data.y[value], mapping_dict={int(value): i for i, value in enumerate(value)}, meta_idx=key)
+            M = Data(edge_index=subgraph_edges, x=data.x[value], y=data.y[value], mapping_dict={int(value): i for i, value in enumerate(value)}, meta_idx=key+coarsen_node)
             M.train_mask = torch.zeros(len(value), dtype=torch.bool)
             M.val_mask = torch.zeros(len(value), dtype=torch.bool)
             M.test_mask = torch.zeros(len(value), dtype=torch.bool)
@@ -176,7 +176,8 @@ def load_data(dataset, candidate, C_list, Gc_list, exp, map_list):
                     M.test_mask[new_node] = True
             subgraph_list.append(M)
 
-        if len(H.info['orig_idx']) > 10 and torch.sum(H_train_mask)+torch.sum(H_val_mask) > 0:
+        #if len(H.info['orig_idx']) > 10 and torch.sum(H_train_mask)+torch.sum(H_val_mask) > 0:
+        if torch.sum(H_train_mask)+torch.sum(H_val_mask) > 0:
             train_labels = one_hot(H_labels, n_classes)
             train_labels[~H_train_mask] = torch.Tensor([0 for _ in range(n_classes)])
             val_labels = one_hot(H_labels, n_classes)
@@ -214,7 +215,8 @@ def load_data(dataset, candidate, C_list, Gc_list, exp, map_list):
                 coarsen_col = np.concatenate([coarsen_col, current_col], axis=0)
             coarsen_node += Gc.W.shape[0]
 
-        elif torch.sum(H_train_mask)+torch.sum(H_val_mask)>0: #Maybe we need to change this statement to else only
+        #elif torch.sum(H_train_mask)+torch.sum(H_val_mask)>0: #Maybe we need to change this statement to else only
+        else:
 
             coarsen_features = torch.cat([coarsen_features, H_features], dim=0)
             coarsen_train_labels = torch.cat([coarsen_train_labels, one_hot(H_labels, n_classes).float()], dim=0) #we need to replace labels here to n_class dimensional vector
@@ -223,13 +225,16 @@ def load_data(dataset, candidate, C_list, Gc_list, exp, map_list):
             coarsen_val_mask = torch.cat([coarsen_val_mask, H_val_mask], dim=0)
 
             if coarsen_row is None:
-                raise Exception('The graph does not need coarsening.')
+                #raise Exception('The graph does not need coarsening.')
+                coarsen_row = Gc.W.tocoo().row
+                coarsen_col = Gc.W.tocoo().col
             else:
                 current_row = H.W.tocoo().row + coarsen_node
                 current_col = H.W.tocoo().col + coarsen_node
                 coarsen_row = np.concatenate([coarsen_row, current_row], axis=0)
                 coarsen_col = np.concatenate([coarsen_col, current_col], axis=0)
             coarsen_node += H.W.shape[0]
+
         number += 1
 
     print('the size of coarsen graph features:', coarsen_features.shape)
