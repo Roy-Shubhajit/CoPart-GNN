@@ -30,10 +30,10 @@ class Net2(torch.nn.Module):
         super(Net2, self).__init__()
         self.num_layers = args.num_layers2
         self.w0 = torch.nn.Parameter(torch.Tensor(args.num_features, 1))
-        self.b0 = torch.nn.Parameter(torch.Tensor(args.num_features, args.num_features))
+        self.b0 = torch.nn.Parameter(torch.Tensor(args.num_features, args.hidden))
         self.conv = torch.nn.ModuleList()
-        self.conv.append(GCNConv(args.num_features, args.hidden))
-        for i in range(self.num_layers - 1):
+        #self.conv.append(GCNConv(args.num_features, args.hidden))
+        for i in range(self.num_layers):
             self.conv.append(GCNConv(args.hidden, args.hidden))
         self.lt1 = torch.nn.Linear(args.hidden, args.num_classes)
 
@@ -45,7 +45,7 @@ class Net2(torch.nn.Module):
         self.lt1.reset_parameters()
 
     def forward(self, x, edge_index, E_meta):
-        new_w0 = torch.matmul(self.w0, E_meta)
+        new_w0 = torch.matmul(self.w0, E_meta.reshape(1,-1))
         new_w0 = torch.add(new_w0, self.b0)
         new_w0 = F.relu(new_w0)
         x = torch.matmul(x, new_w0)

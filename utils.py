@@ -10,7 +10,7 @@ from torch_geometric.utils import subgraph
 def create_distribution_tensor(input_tensor, class_count):
     if input_tensor.dtype != torch.int64:
         input_tensor = input_tensor.long()
-    distribution_tensor = torch.zeros(class_count, dtype=torch.int64)
+    distribution_tensor = torch.zeros(class_count, dtype=torch.int64).to(device=input_tensor.device)
     unique_classes, counts = input_tensor.unique(return_counts=True)
     distribution_tensor[unique_classes-1] = counts
     return distribution_tensor
@@ -180,7 +180,7 @@ def load_data(args, dataset, candidate, C_list, Gc_list, exp, map_list):
                 value = list(set(value))
             subgraph_edges = subgraph(edge_index=data.edge_index, subset=torch.LongTensor(value), relabel_nodes=True)
             subgraph_edges = subgraph_edges[0]
-            M = Data(edge_index=subgraph_edges, x=data.x[value], y=data.y[value], mapping_dict={int(v): i for i, v in enumerate(value)}, meta_idx=key+coarsen_node)
+            M = Data(edge_index=subgraph_edges, x=data.x[value], y=data.y[value], mapping_dict={int(v): i for i, v in enumerate(value)}, meta_idx=key+coarsen_node, num_classes=n_classes)
             M.train_mask = torch.zeros(len(value), dtype=torch.bool)
             M.val_mask = torch.zeros(len(value), dtype=torch.bool)
             M.test_mask = torch.zeros(len(value), dtype=torch.bool)
@@ -255,8 +255,8 @@ def load_data(args, dataset, candidate, C_list, Gc_list, exp, map_list):
         number += 1
 
     print('the size of coarsen graph features:', coarsen_features.shape)
-
-    coarsen_edge = torch.LongTensor([coarsen_row, coarsen_col])
+    coarsen_edge = np.array([coarsen_row, coarsen_col])
+    coarsen_edge = torch.LongTensor(coarsen_edge)
     coarsen_train_labels = coarsen_train_labels.long()
     coarsen_val_labels = coarsen_val_labels.long()
 
