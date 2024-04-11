@@ -98,14 +98,14 @@ if __name__ == '__main__':
     parser.add_argument('--dataset', type=str, default='cora')
     parser.add_argument('--experiment', type=str, default='fixed') #'fixed', 'random', 'few'
     parser.add_argument('--runs', type=int, default=20)
-    parser.add_argument('--hidden', type=int, default=128)
+    parser.add_argument('--hidden', type=int, default=256)
     parser.add_argument('--epochs1', type=int, default=30)
     parser.add_argument('--epochs2', type=int, default=200)
-    parser.add_argument('--num_layers1', type=int, default=3)
-    parser.add_argument('--num_layers2', type=int, default=3)
+    parser.add_argument('--num_layers1', type=int, default=10)
+    parser.add_argument('--num_layers2', type=int, default=10)
     parser.add_argument('--early_stopping', type=int, default=10)
     parser.add_argument('--extra_node', type=bool, default=False)
-    parser.add_argument('--lr', type=float, default=0.01)
+    parser.add_argument('--lr', type=float, default=0.001)
     parser.add_argument('--weight_decay', type=float, default=0.0005)
     parser.add_argument('--normalize_features', type=bool, default=True)
     parser.add_argument('--coarsening_ratio', type=float, default=0.5)
@@ -141,6 +141,8 @@ if __name__ == '__main__':
         if args.normalize_features:
             coarsen_features = F.normalize(coarsen_features, p=1)
             data.x = F.normalize(data.x, p=1)
+            for graph in graphs:
+                graph.x = F.normalize(graph.x, p=1)
 
         model1.reset_parameters()
         optimizer1 = torch.optim.Adam(model1.parameters(), lr=args.lr, weight_decay=args.weight_decay)
