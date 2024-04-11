@@ -104,8 +104,8 @@ if __name__ == '__main__':
     model2 = Net2(args).to(device)
     all_acc = []
 
-    for i in tqdm(range(args.runs)):
-
+    for i in range(args.runs):
+        print(f"####################### Run {i+1}/{args.runs} #######################")
         data, coarsen_features, coarsen_train_labels, coarsen_train_mask, coarsen_val_labels, coarsen_val_mask, coarsen_edge, graphs = load_data(args, 
             args.dataset, candidate, C_list, Gc_list, args.experiment, map_list)
         data = data.to(device)
@@ -130,7 +130,7 @@ if __name__ == '__main__':
         val_loss_history_M1 = []
         val_loss_history_M2  = []
         #training Model 1
-        for epoch in range(args.epochs1):
+        for epoch in tqdm(range(args.epochs1), desc='Training Model 1'):
             train_loss = train_M1(model1, coarsen_features, coarsen_edge, coarsen_train_mask, coarsen_train_labels, F.l1_loss, optimizer1)
             E_meta, val_loss = infer_M1(model1, coarsen_features, coarsen_edge, coarsen_val_mask, coarsen_val_labels, F.l1_loss)
 
@@ -141,7 +141,7 @@ if __name__ == '__main__':
             if epoch > args.early_stopping and val_loss_history_M1[-1] > val_loss_history_M1[-args.early_stopping]:
                 break
         #training Model 2
-        for epoch in range(args.epochs2):
+        for epoch in tqdm(range(args.epochs2), desc='Training Model 2'):
             model1.load_state_dict(torch.load(path + 'checkpoint-best-loss-model-1.pkl'))
             E_meta, val_loss = infer_M1(model1, coarsen_features, coarsen_edge, coarsen_val_mask, coarsen_val_labels, F.l1_loss)
 
@@ -151,15 +151,17 @@ if __name__ == '__main__':
             if val_loss < best_val_loss_M2:
                 best_val_loss_M2 = val_loss
                 torch.save(model2.state_dict(), path + 'checkpoint-best-loss-model-2.pkl')
-            if epoch > args.early_stopping and val_loss_history_M2[-1] > val_loss_history_M2[-args.early_stopping]:
-                break
+            val_loss_history_M2.append(val_loss)
+            #if epoch > args.early_stopping and val_loss_history_M2[-1] > val_loss_history_M2[-args.early_stopping]:
+                #break
         #testing Model 1 and 2
+        print("Testing Model 1 and 2")
         model1.load_state_dict(torch.load(path + 'checkpoint-best-loss-model-1.pkl'))
         model2.load_state_dict(torch.load(path + 'checkpoint-best-loss-model-2.pkl'))
         E_meta, test_loss, test_acc = infer_M1(model1, data.x, data.edge_index, data.test_mask, data.y, F.l1_loss, metric_fn=lambda x, y: int(x.max(1)[1].eq(y).sum().item()) / int(y.sum()))
         test_loss, test_acc = infer_M2(model2, graphs, E_meta, new_loss_fn, metric_fn=lambda x, y: int(x.max(1)[1].eq(y).sum().item()) / int(y.sum()), infer_type='test')
         all_acc.append(test_acc)
         print(f"Run {i+1}/{args.runs} - Test Loss: {test_loss:.4f}, Test Accuracy: {test_acc:.4f}")
-
+        print("#####################################################################")
     print('ave_acc: {:.4f}'.format(np.mean(all_acc)), '+/- {:.4f}'.format(np.std(all_acc)))
 
