@@ -32,7 +32,6 @@ class Net2(torch.nn.Module):
         self.w0 = torch.nn.Parameter(torch.Tensor(args.num_features, 1))
         self.b0 = torch.nn.Parameter(torch.Tensor(args.num_features, args.hidden))
         self.conv = torch.nn.ModuleList()
-        #self.conv.append(GCNConv(args.num_features, args.hidden))
         for i in range(self.num_layers):
             self.conv.append(GCNConv(args.hidden, args.hidden))
         self.lt1 = torch.nn.Linear(args.hidden, args.num_classes)
