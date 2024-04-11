@@ -10,8 +10,9 @@ from tqdm import tqdm
 
 def new_loss_fn(out, y, class_dist):
     add_tensor = torch.tensor([], dtype=torch.float32).to(device)
+    out_prob = torch.exp(out).to(device)
     for i in range(len(class_dist)):
-        new_add = torch.abs((class_dist[i] - torch.sum(out.T[i]))/len(out)).reshape(1).to(device)
+        new_add = torch.abs((class_dist[i] - torch.sum(out_prob.T[i]))/len(out_prob)).reshape(1).to(device)
         add_tensor = torch.cat((add_tensor, new_add), 0)
     return F.nll_loss(out, y) + torch.sum(add_tensor)
 
@@ -79,9 +80,9 @@ if __name__ == '__main__':
     parser.add_argument('--dataset', type=str, default='cora')
     parser.add_argument('--experiment', type=str, default='fixed') #'fixed', 'random', 'few'
     parser.add_argument('--runs', type=int, default=20)
-    parser.add_argument('--hidden', type=int, default=64)
-    parser.add_argument('--epochs1', type=int, default=60)
-    parser.add_argument('--epochs2', type=int, default=100)
+    parser.add_argument('--hidden', type=int, default=128)
+    parser.add_argument('--epochs1', type=int, default=50)
+    parser.add_argument('--epochs2', type=int, default=50)
     parser.add_argument('--num_layers1', type=int, default=2)
     parser.add_argument('--num_layers2', type=int, default=2)
     parser.add_argument('--early_stopping', type=int, default=10)
@@ -130,30 +131,28 @@ if __name__ == '__main__':
         val_loss_history_M1 = []
         val_loss_history_M2  = []
         #training Model 1
-        for epoch in tqdm(range(args.epochs1), desc='Training Model 1'):
+        for epoch in tqdm(range(args.epochs1), desc='Training Model 1', ncols=args.epochs1):
             train_loss = train_M1(model1, coarsen_features, coarsen_edge, coarsen_train_mask, coarsen_train_labels, F.l1_loss, optimizer1)
             E_meta, val_loss = infer_M1(model1, coarsen_features, coarsen_edge, coarsen_val_mask, coarsen_val_labels, F.l1_loss)
 
-            if val_loss < best_val_loss_M1:
+            if val_loss < best_val_loss_M1 or epoch == 0:
                 best_val_loss_M1 = val_loss
                 torch.save(model1.state_dict(), path + 'checkpoint-best-loss-model-1.pkl')
             val_loss_history_M1.append(val_loss)
-            if epoch > args.early_stopping and val_loss_history_M1[-1] > val_loss_history_M1[-args.early_stopping]:
-                break
+
         #training Model 2
-        for epoch in tqdm(range(args.epochs2), desc='Training Model 2'):
+        for epoch in tqdm(range(args.epochs2), desc='Training Model 2', ncols=args.epochs2):
             model1.load_state_dict(torch.load(path + 'checkpoint-best-loss-model-1.pkl'))
             E_meta, val_loss = infer_M1(model1, coarsen_features, coarsen_edge, coarsen_val_mask, coarsen_val_labels, F.l1_loss)
 
             train_loss = train_M2(model2, graphs, E_meta, new_loss_fn, optimizer2)
             val_loss, val_acc = infer_M2(model2, graphs, E_meta, new_loss_fn, metric_fn=lambda x, y: int(x.max(1)[1].eq(y).sum().item()) / int(y.sum()), infer_type='val')
 
-            if val_loss < best_val_loss_M2:
+            if val_loss < best_val_loss_M2 or epoch == 0:
                 best_val_loss_M2 = val_loss
                 torch.save(model2.state_dict(), path + 'checkpoint-best-loss-model-2.pkl')
             val_loss_history_M2.append(val_loss)
-            #if epoch > args.early_stopping and val_loss_history_M2[-1] > val_loss_history_M2[-args.early_stopping]:
-                #break
+
         #testing Model 1 and 2
         print("Testing Model 1 and 2")
         model1.load_state_dict(torch.load(path + 'checkpoint-best-loss-model-1.pkl'))

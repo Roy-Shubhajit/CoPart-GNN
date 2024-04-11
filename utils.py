@@ -162,6 +162,8 @@ def load_data(args, dataset, candidate, C_list, Gc_list, exp, map_list):
 
     while number < len(candidate):
         H = candidate[number]
+        C = C_list[number]
+        Gc = Gc_list[number]
         mapping_dict = map_list[number]
         keep = H.info['orig_idx']
         H_features = features[keep]
@@ -199,8 +201,6 @@ def load_data(args, dataset, candidate, C_list, Gc_list, exp, map_list):
             train_labels[~H_train_mask] = torch.Tensor([0 for _ in range(n_classes)])
             val_labels = one_hot(H_labels, n_classes)
             val_labels[~H_val_mask] = torch.Tensor([0 for _ in range(n_classes)])
-            C = C_list[number]
-            Gc = Gc_list[number]
 
             new_train_mask = torch.BoolTensor(np.sum(C.dot(train_labels), axis=1))
             mix_label = torch.FloatTensor(C.dot(train_labels))
@@ -246,11 +246,11 @@ def load_data(args, dataset, candidate, C_list, Gc_list, exp, map_list):
                 coarsen_row = Gc.W.tocoo().row
                 coarsen_col = Gc.W.tocoo().col
             else:
-                current_row = H.W.tocoo().row + coarsen_node
-                current_col = H.W.tocoo().col + coarsen_node
+                current_row = Gc.W.tocoo().row + coarsen_node
+                current_col = Gc.W.tocoo().col + coarsen_node
                 coarsen_row = np.concatenate([coarsen_row, current_row], axis=0)
                 coarsen_col = np.concatenate([coarsen_col, current_col], axis=0)
-            coarsen_node += H.W.shape[0]
+            coarsen_node += Gc.W.shape[0]
 
         number += 1
 
