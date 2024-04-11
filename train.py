@@ -10,13 +10,14 @@ from tqdm import tqdm
 from torchmetrics import Accuracy
 
 class new_loss_fn(torch.nn.Module):
-    def __init__(self):
+    def __init__(self, args):
         super(new_loss_fn, self).__init__()
+        self.num_classes = args.num_classes
 
     def forward(self, predictions, targets):
         add_tensor = torch.tensor([], dtype=torch.float32).to(device)
         out_prob = torch.exp(predictions).to(device)
-        class_dist = create_distribution_tensor(targets, len(out_prob)).to(device)
+        class_dist = create_distribution_tensor(targets, self.num_classes).to(device)
         for i in range(len(class_dist)):
             new_add = torch.abs((class_dist[i] - torch.sum(out_prob.T[i]))/len(out_prob)).reshape(1).to(device)
             add_tensor = torch.cat((add_tensor, new_add), 0)
@@ -132,7 +133,7 @@ if __name__ == '__main__':
         model2.reset_parameters()
         optimizer2 = torch.optim.Adam(model2.parameters(), lr=args.lr, weight_decay=args.weight_decay)
         accuracy = Accuracy(task="multiclass", num_classes=args.num_classes).to(device)
-        new_loss = new_loss_fn().to(device)
+        new_loss = new_loss_fn(args).to(device)
         best_val_loss_M1 = float('inf')
         best_val_loss_M2 = float('inf')
         val_loss_history_M1 = []
