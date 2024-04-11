@@ -81,8 +81,8 @@ if __name__ == '__main__':
     parser.add_argument('--experiment', type=str, default='fixed') #'fixed', 'random', 'few'
     parser.add_argument('--runs', type=int, default=20)
     parser.add_argument('--hidden', type=int, default=128)
-    parser.add_argument('--epochs1', type=int, default=50)
-    parser.add_argument('--epochs2', type=int, default=50)
+    parser.add_argument('--epochs1', type=int, default=25)
+    parser.add_argument('--epochs2', type=int, default=25)
     parser.add_argument('--num_layers1', type=int, default=2)
     parser.add_argument('--num_layers2', type=int, default=2)
     parser.add_argument('--early_stopping', type=int, default=10)
@@ -92,11 +92,13 @@ if __name__ == '__main__':
     parser.add_argument('--normalize_features', type=bool, default=True)
     parser.add_argument('--coarsening_ratio', type=float, default=0.5)
     parser.add_argument('--coarsening_method', type=str, default='variation_neighborhoods')
+    parser.add_argument('--output_dir', type=str, required=True)
     args = parser.parse_args()
-    path = "params/"
-    if not os.path.isdir(path):
-        os.mkdir(path)
-
+    path = "save/"+args.output_dir+"/"
+    if not os.path.exists('save'):
+        os.makedirs('save')
+    if not os.path.exists(path):
+        os.makedirs(path)
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     args.num_features, args.num_classes, candidate, C_list, Gc_list, map_list = coarsening(args.dataset, 1-args.coarsening_ratio, args.coarsening_method)
     print('num_features: {}, num_classes: {}'.format(args.num_features, args.num_classes))
@@ -107,7 +109,7 @@ if __name__ == '__main__':
 
     for i in range(args.runs):
         print(f"####################### Run {i+1}/{args.runs} #######################")
-        data, coarsen_features, coarsen_train_labels, coarsen_train_mask, coarsen_val_labels, coarsen_val_mask, coarsen_edge, graphs = load_data(args, 
+        data, coarsen_features, coarsen_train_labels, coarsen_train_mask, coarsen_val_labels, coarsen_val_mask, coarsen_test_labels, coarsen_test_mask, coarsen_edge, graphs = load_data(args, 
             args.dataset, candidate, C_list, Gc_list, args.experiment, map_list)
         data = data.to(device)
         coarsen_features = coarsen_features.to(device)
@@ -115,6 +117,8 @@ if __name__ == '__main__':
         coarsen_train_mask = coarsen_train_mask.to(device)
         coarsen_val_labels = coarsen_val_labels.to(device)
         coarsen_val_mask = coarsen_val_mask.to(device)
+        coarsen_test_labels = coarsen_test_labels.to(device)
+        coarsen_test_mask = coarsen_test_mask.to(device)
         coarsen_edge = coarsen_edge.to(device)
 
         if args.normalize_features:
@@ -132,8 +136,8 @@ if __name__ == '__main__':
         val_loss_history_M2  = []
         #training Model 1
         for epoch in tqdm(range(args.epochs1), desc='Training Model 1',ascii=True):
-            train_loss = train_M1(model1, coarsen_features, coarsen_edge, coarsen_train_mask, coarsen_train_labels, F.l1_loss, optimizer1)
-            E_meta, val_loss = infer_M1(model1, coarsen_features, coarsen_edge, coarsen_val_mask, coarsen_val_labels, F.l1_loss)
+            train_loss = train_M1(model=model1, x=coarsen_features, edge_index=coarsen_edge, mask=coarsen_train_mask, y=coarsen_train_labels, loss_fn=F.l1_loss, optimizer=optimizer1)
+            E_meta, val_loss = infer_M1(model=model1, x=coarsen_features, edge_index=coarsen_edge, mask=coarsen_val_mask, y=coarsen_val_labels, loss_fn=F.l1_loss)
 
             if val_loss < best_val_loss_M1 or epoch == 0:
                 best_val_loss_M1 = val_loss
@@ -143,10 +147,10 @@ if __name__ == '__main__':
         #training Model 2
         for epoch in tqdm(range(args.epochs2), desc='Training Model 2',ascii=True):
             model1.load_state_dict(torch.load(path + 'checkpoint-best-loss-model-1.pkl'))
-            E_meta, val_loss = infer_M1(model1, coarsen_features, coarsen_edge, coarsen_val_mask, coarsen_val_labels, F.l1_loss)
+            E_meta, val_loss = infer_M1(model=model1, x=coarsen_features, edge_index=coarsen_edge, mask=coarsen_val_mask, y=coarsen_val_labels, loss_fn=F.l1_loss)
 
-            train_loss = train_M2(model2, graphs, E_meta, new_loss_fn, optimizer2)
-            val_loss, val_acc = infer_M2(model2, graphs, E_meta, new_loss_fn, metric_fn=lambda x, y: int(x.max(1)[1].eq(y).sum().item()) / int(y.sum()), infer_type='val')
+            train_loss = train_M2(model=model2, graphs=graphs, E_meta=E_meta, loss_fn=new_loss_fn, optimizer=optimizer2)
+            val_loss, val_acc = infer_M2(model=model2, graphs=graphs, E_meta=E_meta, loss_fn=new_loss_fn, metric_fn=lambda x, y: int(x.max(1)[1].eq(y).sum().item()) / int(y.sum()), infer_type='val')
 
             if val_loss < best_val_loss_M2 or epoch == 0:
                 best_val_loss_M2 = val_loss
@@ -157,8 +161,8 @@ if __name__ == '__main__':
         print("Testing Model 1 and 2")
         model1.load_state_dict(torch.load(path + 'checkpoint-best-loss-model-1.pkl'))
         model2.load_state_dict(torch.load(path + 'checkpoint-best-loss-model-2.pkl'))
-        E_meta, test_loss, test_acc = infer_M1(model1, data.x, data.edge_index, data.test_mask, data.y, F.l1_loss, metric_fn=lambda x, y: int(x.max(1)[1].eq(y).sum().item()) / int(y.sum()))
-        test_loss, test_acc = infer_M2(model2, graphs, E_meta, new_loss_fn, metric_fn=lambda x, y: int(x.max(1)[1].eq(y).sum().item()) / int(y.sum()), infer_type='test')
+        E_meta, test_loss, test_acc = infer_M1(model=model1, x=coarsen_features, edge_index=coarsen_edge, mask=coarsen_test_mask, y=coarsen_test_labels, loss_fn=F.l1_loss)
+        test_loss, test_acc = infer_M2(model=model2, graphs=graphs, E_meta=E_meta, loss_fn=new_loss_fn, metric_fn=lambda x, y: int(x.max(1)[1].eq(y).sum().item()) / int(y.sum()), infer_type='test')
         all_acc.append(test_acc)
         print(f"Run {i+1}/{args.runs} - Test Loss: {test_loss:.4f}, Test Accuracy: {test_acc:.4f}")
         print("#####################################################################")
