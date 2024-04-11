@@ -100,7 +100,7 @@ if __name__ == '__main__':
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     args.num_features, args.num_classes, candidate, C_list, Gc_list, map_list = coarsening(args.dataset, 1-args.coarsening_ratio, args.coarsening_method)
     print('num_features: {}, num_classes: {}'.format(args.num_features, args.num_classes))
-    print('Number of subgraphs: {}'.format(len(candidate)))
+    print('Number of components: {}'.format(len(candidate)))
     model1 = Net1(args).to(device)
     model2 = Net2(args).to(device)
     all_acc = []
@@ -131,7 +131,7 @@ if __name__ == '__main__':
         val_loss_history_M1 = []
         val_loss_history_M2  = []
         #training Model 1
-        for epoch in tqdm(range(args.epochs1), desc='Training Model 1', ncols=args.epochs1):
+        for epoch in tqdm(range(args.epochs1), desc='Training Model 1',ascii=True):
             train_loss = train_M1(model1, coarsen_features, coarsen_edge, coarsen_train_mask, coarsen_train_labels, F.l1_loss, optimizer1)
             E_meta, val_loss = infer_M1(model1, coarsen_features, coarsen_edge, coarsen_val_mask, coarsen_val_labels, F.l1_loss)
 
@@ -141,7 +141,7 @@ if __name__ == '__main__':
             val_loss_history_M1.append(val_loss)
 
         #training Model 2
-        for epoch in tqdm(range(args.epochs2), desc='Training Model 2', ncols=args.epochs2):
+        for epoch in tqdm(range(args.epochs2), desc='Training Model 2',ascii=True):
             model1.load_state_dict(torch.load(path + 'checkpoint-best-loss-model-1.pkl'))
             E_meta, val_loss = infer_M1(model1, coarsen_features, coarsen_edge, coarsen_val_mask, coarsen_val_labels, F.l1_loss)
 
