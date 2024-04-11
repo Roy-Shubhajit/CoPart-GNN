@@ -95,6 +95,9 @@ if __name__ == '__main__':
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     args.num_features, args.num_classes, candidate, C_list, Gc_list, map_list = coarsening(args.dataset, 1-args.coarsening_ratio, args.coarsening_method)
+    print('num_features: {}, num_classes: {}'.format(args.num_features, args.num_classes))
+    print('Number of subgraphs: {}'.format(len(candidate)))
+    print(len(C_list), len(Gc_list), len(map_list))
     model1 = Net1(args).to(device)
     model2 = Net2(args).to(device)
     all_acc = []

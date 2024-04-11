@@ -85,7 +85,6 @@ def coarsening(dataset, coarsening_ratio, coarsening_method):
     data = dataset[0]
     G = gsp.graphs.Graph(W=to_dense_adj(data.edge_index)[0])
     components = extract_components(G)
-    print('the number of subgraphs is', len(components))
     candidate = sorted(components, key=lambda x: len(x.info['orig_idx']), reverse=True)
     number = 0
     C_list=[]
@@ -93,11 +92,16 @@ def coarsening(dataset, coarsening_ratio, coarsening_method):
     map_list=[]
     while number < len(candidate):
         H = candidate[number]
-        if len(H.info['orig_idx']) > 10:
+        if len(H.info['orig_idx']) > 1:
             C, Gc, Call, Gall, mapping_dict_list = coarsen(H, r=coarsening_ratio, method=coarsening_method)
             C_list.append(C)
             Gc_list.append(Gc)
             map_list.append(subgraph_mapping(mapping_dict_list))
+        else:
+            C = sp.sparse.eye(H.N, format="csc")
+            C_list.append(C)
+            Gc_list.append(H)
+            map_list.append(subgraph_mapping([{0: 0}]))
         number += 1
     return data.x.shape[1], len(set(np.array(data.y))), candidate, C_list, Gc_list, map_list
 
