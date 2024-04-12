@@ -86,7 +86,7 @@ def coarsen(
                 else:
                     offset = 2 * max(G.dw)
                     T = offset * sp.sparse.eye(G.N, format="csc") - G.L
-                    lk, Uk = sp.sparse.linalg.eigsh(T, k=K, which="LM", tol=1e-5)
+                    lk, Uk = sp.sparse.linalg.eigsh(T.toarray(), k=K, which="LM", tol=1e-5)
                     lk = (offset - lk)[::-1]
                     Uk = Uk[:, ::-1]
                     mask = lk < 1e-10
@@ -128,6 +128,9 @@ def coarsen(
         iC = get_coarsening_matrix(G, coarsening_list)
 
         if iC.shape[1] - iC.shape[0] <= 2:
+            for i in range(G.N):
+                mapping_dict[i] = i
+            mapping_dict_list.append(mapping_dict)
             break  # avoid too many levels for so few nodes
 
         C = iC.dot(C)
