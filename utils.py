@@ -6,6 +6,7 @@ from torch_geometric.datasets import Coauthor
 from torch_geometric.datasets import CitationFull
 from torch_geometric.data import Data
 from torch_geometric.utils import subgraph
+from tqdm import tqdm
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -104,7 +105,7 @@ def coarsening(args, coarsening_ratio, coarsening_method):
         H = candidate[number]
         original_map = orig_to_new_map(H.info['orig_idx'])
         if len(H.info['orig_idx']) > 1:
-            C, Gc, Call, Gall, mapping_dict_list = coarsen(H, r=coarsening_ratio, method=coarsening_method)
+            C, Gc, mapping_dict_list = coarsen(H, r=coarsening_ratio, method=coarsening_method)
             if len(H.info['orig_idx']) > 10:
                 C_list.append(C)
                 Gc_list.append(Gc)
@@ -140,6 +141,7 @@ def coarsening(args, coarsening_ratio, coarsening_method):
                 M.ext_node = ext_nodes
                 subgraph_list.append(M)
         number += 1
+    print("Subgraphs created, number of subgraphs: ", len(subgraph_list))
     return data.x.shape[1], len(set(np.array(data.y))), candidate, C_list, Gc_list, subgraph_list
 
 def index_to_mask(index, size):
@@ -170,7 +172,7 @@ def splits(data, num_classes, exp):
 
     return data
 
-def load_data(args, dataset, candidate, C_list, Gc_list, exp, subgraph_list):
+def load_data(dataset, candidate, C_list, Gc_list, exp, subgraph_list):
     if dataset == 'dblp':
         dataset = CitationFull(root='./dataset', name=dataset)
     elif dataset == 'Physics':
@@ -195,18 +197,25 @@ def load_data(args, dataset, candidate, C_list, Gc_list, exp, subgraph_list):
     coarsen_val_labels = torch.Tensor([])
     coarsen_val_mask = torch.Tensor([]).bool()
 
+    new_graphs = []
+
     for graph in subgraph_list:
+        F = Data(x=graph.x, edge_index=graph.edge_index, y=graph.y, train_mask=graph.train_mask, val_mask=graph.val_mask, test_mask=graph.test_mask)
         for node, new_node in graph.map_dict.items():
-            if node in graph.ext_node:
-                graph.train_mask[new_node] = False
-                graph.val_mask[new_node] = False
-                graph.test_mask[new_node] = False
             if train_mask[node]:
-                train_mask[new_node] = True
+                F.train_mask[new_node] = True
             if val_mask[node]:
-                val_mask[new_node] = True
+                F.val_mask[new_node] = True
             if test_mask[node]:
-                test_mask[new_node] = True
+                F.test_mask[new_node] = True
+            if node in graph.ext_node:
+                F.train_mask[new_node] = False
+                F.val_mask[new_node] = False
+                F.test_mask[new_node] = False
+        new_graphs.append(F)
+    
+    del subgraph_list
+    del data
 
     while number < len(candidate):
         H = candidate[number]
@@ -277,4 +286,4 @@ def load_data(args, dataset, candidate, C_list, Gc_list, exp, subgraph_list):
     coarsen_train_labels = coarsen_train_labels.long()
     coarsen_val_labels = coarsen_val_labels.long()
 
-    return data, coarsen_features, coarsen_train_labels, coarsen_train_mask, coarsen_val_labels, coarsen_val_mask, coarsen_edge, subgraph_list
+    return coarsen_features, coarsen_train_labels, coarsen_train_mask, coarsen_val_labels, coarsen_val_mask, coarsen_edge, new_graphs

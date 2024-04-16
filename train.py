@@ -7,6 +7,7 @@ import numpy as np
 from utils import load_data, coarsening, create_distribution_tensor
 import os
 from tqdm import tqdm
+from torch_geometric.loader import DataLoader
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -40,9 +41,9 @@ def infer_M1(model, x, edge_index, mask, y, loss_fn):
     loss = loss_fn(out[mask], y[mask])
     return loss.item()
 
-def train_M2(model, graphs, loss_fn, optimizer):
+def train_M2(model, graph_data, loss_fn, optimizer):
     total_loss = 0
-    for graph in graphs:
+    for graph in graph_data:
         model.train()
         optimizer.zero_grad()
         x = graph.x.to(device)
@@ -58,11 +59,11 @@ def train_M2(model, graphs, loss_fn, optimizer):
             continue
     return total_loss / len(graphs)
 
-def infer_M2(model, graphs, loss_fn, infer_type):
+def infer_M2(model, graph_data, loss_fn, infer_type):
     total_loss = 0
     all_out = torch.tensor([], dtype=torch.float32).to(device)
     all_label = torch.tensor([], dtype=torch.float32).to(device)
-    for graph in graphs:
+    for graph in graph_data:
         model.eval()
         x = graph.x.to(device)
         y = graph.y.to(device)
@@ -99,6 +100,7 @@ if __name__ == '__main__':
     parser.add_argument('--epochs2', type=int, default=200)
     parser.add_argument('--num_layers1', type=int, default=2)
     parser.add_argument('--num_layers2', type=int, default=2)
+    parser.add_argument('--batch_size', type=int, default=1)
     parser.add_argument('--early_stopping', type=int, default=10)
     parser.add_argument('--extra_node', type=bool, default=False)
     parser.add_argument('--lr', type=float, default=0.01)
@@ -120,9 +122,7 @@ if __name__ == '__main__':
 
     for i in range(args.runs):
         print(f"####################### Run {i+1}/{args.runs} #######################")
-        data, coarsen_features, coarsen_train_labels, coarsen_train_mask, coarsen_val_labels, coarsen_val_mask, coarsen_edge, graphs = load_data(args, 
-            args.dataset, candidate, C_list, Gc_list, args.experiment, subgraph_list)
-        data = data.to(device)
+        coarsen_features, coarsen_train_labels, coarsen_train_mask, coarsen_val_labels, coarsen_val_mask, coarsen_edge, graphs = load_data(args.dataset, candidate, C_list, Gc_list, args.experiment, subgraph_list)
         coarsen_features = coarsen_features.to(device)
         coarsen_train_labels = coarsen_train_labels.to(device)
         coarsen_train_mask = coarsen_train_mask.to(device)
@@ -132,10 +132,11 @@ if __name__ == '__main__':
 
         if args.normalize_features:
             coarsen_features = F.normalize(coarsen_features, p=1)
-            data.x = F.normalize(data.x, p=1)
             for graph in graphs:
                 graph.x = F.normalize(graph.x, p=1)
-                
+        
+        graph_data = DataLoader(graphs, batch_size=args.batch_size, shuffle=True)  
+
         model1 = Net1(args).to(device)
         model1.reset_parameters()
         optimizer1 = torch.optim.Adam(model1.parameters(), lr=args.lr, weight_decay=args.weight_decay)
@@ -166,8 +167,8 @@ if __name__ == '__main__':
 
         #training Model 2
         for epoch in tqdm(range(args.epochs2), desc='Training Model 2',ascii=True):
-            train_loss = train_M2(model=model2, graphs=graphs, loss_fn=new_loss, optimizer=optimizer2)
-            val_loss, val_acc = infer_M2(model=model2, graphs=graphs, loss_fn=new_loss, infer_type='val')
+            train_loss = train_M2(model2, graph_data, new_loss, optimizer2)
+            val_loss, val_acc = infer_M2(model2, graph_data, new_loss, 'val')
             if (epoch+1)%5 == 0 or epoch == 0:
                 print(f"Epoch {epoch+1}/{args.epochs2} - Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}, Val Accuracy: {val_acc:.4f}")
             if val_loss < best_val_loss_M2 or epoch == 0:
@@ -176,7 +177,7 @@ if __name__ == '__main__':
             val_loss_history_M2.append(val_loss)
 
         best_model2 = model2.load_state_dict(torch.load(path+'/model2.pt'))
-        test_loss, test_acc = infer_M2(model=model2, graphs=graphs, loss_fn=new_loss, infer_type='test')
+        test_loss, test_acc = infer_M2(model2, graph_data, new_loss, 'test')
         all_acc.append(test_acc)
         print(f"Run {i+1}/{args.runs} - Test Loss: {test_loss:.4f}, Test Accuracy: {test_acc:.4f}")
         print("#####################################################################")
