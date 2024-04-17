@@ -218,7 +218,10 @@ def load_data(dataset, candidate, C_list, Gc_list, exp, subgraph_list):
     new_graphs = []
 
     for graph in subgraph_list:
-        F = Data(x=graph.x, edge_index=graph.edge_index, y=graph.y, train_mask=graph.train_mask, val_mask=graph.val_mask, test_mask=graph.test_mask)
+        F = Data(x=graph.x, edge_index=graph.edge_index, y=graph.y)
+        F.train_mask = torch.zeros(graph.x.shape[0], dtype=torch.bool)
+        F.val_mask = torch.zeros(graph.x.shape[0], dtype=torch.bool)
+        F.test_mask = torch.zeros(graph.x.shape[0], dtype=torch.bool)
         for node, new_node in graph.map_dict.items():
             if train_mask[node]:
                 F.train_mask[new_node] = True
