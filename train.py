@@ -8,6 +8,7 @@ from utils import load_data, coarsening, create_distribution_tensor
 import os
 from tqdm import tqdm
 from torch_geometric.loader import DataLoader
+from torch.utils.tensorboard import SummaryWriter
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -96,7 +97,7 @@ if __name__ == '__main__':
     parser.add_argument('--experiment', type=str, default='fixed') #'fixed', 'random', 'few'
     parser.add_argument('--runs', type=int, default=20)
     parser.add_argument('--hidden', type=int, default=512)
-    parser.add_argument('--epochs1', type=int, default=100)
+    parser.add_argument('--epochs1', type=int, default=200)
     parser.add_argument('--epochs2', type=int, default=200)
     parser.add_argument('--num_layers1', type=int, default=2)
     parser.add_argument('--num_layers2', type=int, default=2)
@@ -115,6 +116,7 @@ if __name__ == '__main__':
         os.makedirs('save')
     if not os.path.exists(path):
         os.makedirs(path)
+    writer = SummaryWriter(path)
     args.num_features, args.num_classes, candidate, C_list, Gc_list, subgraph_list = coarsening(args, 1-args.coarsening_ratio, args.coarsening_method)
     print('num_features: {}, num_classes: {}'.format(args.num_features, args.num_classes))
     print('Number of components: {}'.format(len(candidate)))
@@ -122,6 +124,7 @@ if __name__ == '__main__':
 
     for i in range(args.runs):
         print(f"####################### Run {i+1}/{args.runs} #######################")
+        run_writer = SummaryWriter(path+'/run_'+str(i+1))
         coarsen_features, coarsen_train_labels, coarsen_train_mask, coarsen_val_labels, coarsen_val_mask, coarsen_edge, graphs = load_data(args.dataset, candidate, C_list, Gc_list, args.experiment, subgraph_list)
         coarsen_features = coarsen_features.to(device)
         coarsen_train_labels = coarsen_train_labels.to(device)
@@ -132,8 +135,6 @@ if __name__ == '__main__':
 
         if args.normalize_features:
             coarsen_features = F.normalize(coarsen_features, p=1)
-            for graph in graphs:
-                graph.x = F.normalize(graph.x, p=1)
         
         graph_data = DataLoader(graphs, batch_size=args.batch_size, shuffle=True)  
 
@@ -151,12 +152,15 @@ if __name__ == '__main__':
         for epoch in tqdm(range(args.epochs1), desc='Training Model 1',ascii=True):
             train_loss = train_M1(model=model1, x=coarsen_features, edge_index=coarsen_edge, mask=coarsen_train_mask, y=coarsen_train_labels, loss_fn=F.nll_loss, optimizer=optimizer1)
             val_loss = infer_M1(model=model1, x=coarsen_features, edge_index=coarsen_edge, mask=coarsen_val_mask, y=coarsen_val_labels, loss_fn=F.nll_loss)
-            if (epoch+1)%5 == 0 or epoch == 0:
-                print(f"Epoch {epoch+1}/{args.epochs1} - Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}")
+            #if (epoch+1)%5 == 0 or epoch == 0:
+                #print(f"Epoch {epoch+1}/{args.epochs1} - Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}")
             if val_loss < best_val_loss_M1 or epoch == 0:
+                print(f"Epoch {epoch+1}/{args.epochs1} - Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}")
                 best_val_loss_M1 = val_loss
                 torch.save(model1.state_dict(), path+'/model1.pt')
             val_loss_history_M1.append(val_loss)
+            run_writer.add_scalar('Model 1 - Loss/train', train_loss, epoch)
+            run_writer.add_scalar('Model 1 - Loss/val', val_loss, epoch)
 
         model1.load_state_dict(torch.load(path+'/model1.pt'))
         for param in model1.conv.parameters():
@@ -164,21 +168,26 @@ if __name__ == '__main__':
 
         model2 = TransferNet(args, model1).to(device)
         model2.reset_parameters()
-        optimizer2 = torch.optim.Adam(model2.new_lt1.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+        optimizer2 = torch.optim.Adam(model2.new_lt1.parameters(), lr=0.01, weight_decay=args.weight_decay)
 
         #training Model 2
         for epoch in tqdm(range(args.epochs2), desc='Training Model 2',ascii=True):
             train_loss = train_M2(model2, graph_data, new_loss, optimizer2)
             val_loss, val_acc = infer_M2(model2, graph_data, new_loss, 'val')
-            if (epoch+1)%5 == 0 or epoch == 0:
-                print(f"Epoch {epoch+1}/{args.epochs2} - Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}, Val Accuracy: {val_acc:.4f}")
+            #if (epoch+1)%5 == 0 or epoch == 0:
+                #print(f"Epoch {epoch+1}/{args.epochs2} - Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}, Val Accuracy: {val_acc:.4f}")
             if val_loss < best_val_loss_M2 or epoch == 0:
+                print(f"Epoch {epoch+1}/{args.epochs2} - Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}, Val Accuracy: {val_acc:.4f}")
                 best_val_loss_M2 = val_loss
                 torch.save(model2.state_dict(), path+'/model2.pt')
             val_loss_history_M2.append(val_loss)
+            run_writer.add_scalar('Model 2 - Loss/train', train_loss, epoch)
+            run_writer.add_scalar('Model 2 - Loss/val', val_loss, epoch)
+            run_writer.add_scalar('Model 2 - Accuracy/val', val_acc, epoch)
 
         best_model2 = model2.load_state_dict(torch.load(path+'/model2.pt'))
         test_loss, test_acc = infer_M2(model2, graph_data, new_loss, 'test')
+        writer.add_scalar('Test Acc', test_acc, 0)
         all_acc.append(test_acc)
         print(f"Run {i+1}/{args.runs} - Test Loss: {test_loss:.4f}, Test Accuracy: {test_acc:.4f}")
         print("#####################################################################")

@@ -94,6 +94,8 @@ def coarsening(args, coarsening_ratio, coarsening_method):
     else:
         dataset = Planetoid(root='./dataset', name=args.dataset)
     data = dataset[0]
+    if args.normalize_features:
+        data.x = torch.nn.functional.normalize(data.x, p=1)
     G = gsp.graphs.Graph(W=to_dense_adj(data.edge_index)[0])
     components = extract_components(G)
     candidate = sorted(components, key=lambda x: len(x.info['orig_idx']), reverse=True)
@@ -212,6 +214,7 @@ def load_data(dataset, candidate, C_list, Gc_list, exp, subgraph_list):
                 F.train_mask[new_node] = False
                 F.val_mask[new_node] = False
                 F.test_mask[new_node] = False
+        
         new_graphs.append(F)
     
     del subgraph_list
