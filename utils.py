@@ -21,10 +21,18 @@ def create_distribution_tensor(input_tensor, class_count):
 def one_hot(x, class_count):
     return torch.eye(class_count)[x, :]
 
-def neighbour(G, node):
-    edges_connected_to_k = torch.nonzero(G.edge_index[0] == node, as_tuple=False)
-    neighbors_k = G.edge_index[1][edges_connected_to_k].flatten().tolist()
-    return neighbors_k
+def neighbor(G, nodes):
+    if not hasattr(G, 'edge_index'):
+        raise ValueError("The input graph must have the 'edge_index' attribute.")
+    if not isinstance(nodes, torch.Tensor):
+        nodes = torch.tensor(nodes)
+    nodes = nodes.to(device)
+    edge_index_gpu = G.edge_index.to(nodes.device)
+    mask = (edge_index_gpu[0] == nodes.unsqueeze(-1)).any(dim=0)
+    edges_connected_to_nodes = edge_index_gpu[:, mask]
+    neighbors = torch.unique(edges_connected_to_nodes[1])
+
+    return neighbors
 
 def extract_components(H):
         if H.A.shape[0] != H.A.shape[1]:
@@ -94,11 +102,13 @@ def coarsening(args, coarsening_ratio, coarsening_method):
     else:
         dataset = Planetoid(root='./dataset', name=args.dataset)
     data = dataset[0]
+    num_classes = len(set(np.array(data.y)))
     if args.normalize_features:
         data.x = torch.nn.functional.normalize(data.x, p=1)
     G = gsp.graphs.Graph(W=to_dense_adj(data.edge_index)[0])
     components = extract_components(G)
     candidate = sorted(components, key=lambda x: len(x.info['orig_idx']), reverse=True)
+    data.to(device)
     number = 0
     C_list=[]
     Gc_list=[]
@@ -113,38 +123,44 @@ def coarsening(args, coarsening_ratio, coarsening_method):
                 Gc_list.append(Gc)
             mapping_dict = metanode_to_node_mapping_new(subgraph_mapping(mapping_dict_list), original_map)
             for key, value in mapping_dict.items():
-                ext_nodes = []
+                value = torch.LongTensor(value).to(device)
                 if args.extra_node:
-                    for node in value:
-                        ext_nodes.extend(neighbour(data, node))
-                    ext_nodes = list(set(ext_nodes))
-                    value.extend(ext_nodes)
-                    value = list(set(value))
-                value = torch.LongTensor(value)
-                M = data.subgraph(index_to_mask(value, data.num_nodes))
-                M.num_classes = len(set(np.array(data.y)))
-                M.map_dict = {int(v): i for i, v in enumerate(value)}
-                M.ext_node = ext_nodes
+                    ext_nodes = neighbor(data, value)
+                    actual_ext = ext_nodes[~torch.isin(ext_nodes, value)].to(device)
+                    value = torch.cat((value, ext_nodes), dim=0)
+                    value = torch.unique(value)
+                value, _ = torch.sort(value)
+                mappiing = {}
+                for i in range(len(value)):
+                    mappiing[value[i].item()] = i
+                M = data.subgraph(value)
+                M.num_classes = num_classes
+                M.map_dict = mappiing
+                M.ext_node = actual_ext
+                M.to(device)
                 subgraph_list.append(M)
         else:
             mapping_dict = metanode_to_node_mapping_new(subgraph_mapping([{0: 0}]), original_map)
             for key, value in mapping_dict.items():
-                ext_nodes = []
+                value = torch.LongTensor(value).to(device)
                 if args.extra_node:
-                    for node in value:
-                        ext_nodes.extend(neighbour(data, node))
-                    ext_nodes = list(set(ext_nodes))
-                    value.extend(ext_nodes)
-                    value = list(set(value))
-                value = torch.LongTensor(value)
-                M = data.subgraph(index_to_mask(value, data.num_nodes))
-                M.num_classes = len(set(np.array(data.y)))
-                M.map_dict = {int(v): i for i, v in enumerate(value)}
-                M.ext_node = ext_nodes
+                    ext_nodes = neighbor(data, value)
+                    actual_ext = ext_nodes[~torch.isin(ext_nodes, value)].to(device)
+                    value = torch.cat((value, ext_nodes), dim=0)
+                    value = torch.unique(value)
+                value, _ = torch.sort(value)
+                mappiing = {}
+                for i in range(len(value)):
+                    mappiing[value[i].item()] = i
+                M = data.subgraph(value)
+                M.num_classes = num_classes
+                M.map_dict = mappiing
+                M.ext_node = actual_ext
+                M.to(device)
                 subgraph_list.append(M)
         number += 1
     print("Subgraphs created, number of subgraphs: ", len(subgraph_list))
-    return data.x.shape[1], len(set(np.array(data.y))), candidate, C_list, Gc_list, subgraph_list
+    return data.x.shape[1], num_classes, candidate, C_list, Gc_list, subgraph_list
 
 def index_to_mask(index, size):
     mask = torch.zeros(size, dtype=torch.bool, device=index.device)

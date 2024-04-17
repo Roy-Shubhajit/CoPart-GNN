@@ -45,13 +45,13 @@ def infer_M1(model, x, edge_index, mask, y, loss_fn):
 def train_M2(model, graph_data, loss_fn, optimizer):
     total_loss = 0
     for graph in graph_data:
-        model.train()
-        optimizer.zero_grad()
-        x = graph.x.to(device)
-        y = graph.y.to(device)
-        edge_index = graph.edge_index.to(device)
-        out = model(x, edge_index)
         if True in graph.train_mask:
+            model.train()
+            optimizer.zero_grad()
+            x = graph.x.to(device)
+            y = graph.y.to(device)
+            edge_index = graph.edge_index.to(device)
+            out = model(x, edge_index)
             loss = loss_fn(out[graph.train_mask], y[graph.train_mask])
             loss.backward(retain_graph=True)
             optimizer.step()
@@ -69,9 +69,9 @@ def infer_M2(model, graph_data, loss_fn, infer_type):
         x = graph.x.to(device)
         y = graph.y.to(device)
         edge_index = graph.edge_index.to(device)
-        out = model(x, edge_index)
         if infer_type == 'test':
             if True in graph.test_mask:
+                out = model(x, edge_index)
                 loss = loss_fn(out[graph.test_mask], y[graph.test_mask])
                 total_loss += loss.item()
                 all_out = torch.cat((all_out, torch.max(out[graph.test_mask], dim=1)[1].to(device)), dim=0)
@@ -80,6 +80,7 @@ def infer_M2(model, graph_data, loss_fn, infer_type):
                 continue
         else:
             if True in graph.val_mask:
+                out = model(x, edge_index)
                 loss = loss_fn(out[graph.val_mask], y[graph.val_mask])
                 total_loss += loss.item()
                 all_out = torch.cat((all_out, torch.max(out[graph.val_mask], dim=1)[1].to(device)), dim=0)
@@ -187,7 +188,7 @@ if __name__ == '__main__':
 
         best_model2 = model2.load_state_dict(torch.load(path+'/model2.pt'))
         test_loss, test_acc = infer_M2(model2, graph_data, new_loss, 'test')
-        writer.add_scalar('Test Acc', test_acc, 0)
+        writer.add_scalar('Model 2 - Accuracy/test', test_acc, i)
         all_acc.append(test_acc)
         print(f"Run {i+1}/{args.runs} - Test Loss: {test_loss:.4f}, Test Accuracy: {test_acc:.4f}")
         print("#####################################################################")
