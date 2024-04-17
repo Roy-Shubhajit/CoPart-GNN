@@ -23,7 +23,7 @@ class Net1(torch.nn.Module):
             x = F.elu(x)
             x = F.dropout(x, training=self.training)
         z = self.lt1(x)
-        return z
+        return F.log_softmax(z, dim=1)
     
 class TransferNet(torch.nn.Module):
     def __init__(self, args, model1):

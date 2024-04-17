@@ -53,7 +53,6 @@ def coarsen(
     C, Gc, Call, Gall = coarsen(G, K=10, r=0.8)
     """
     r = np.clip(r, 0, 0.999)
-    G0 = G
     N = G.N
 
     # current and target graph sizes
@@ -62,10 +61,6 @@ def coarsen(
     C = sp.sparse.eye(N, format="csc")
     Gc = G
     mapping_dict_list = []
-
-    Call, Gall = [], []
-    Gall.append(G)
-
     for level in range(1, max_levels + 1):
 
         G = Gc
@@ -133,7 +128,6 @@ def coarsen(
             break  # avoid too many levels for so few nodes
 
         C = iC.dot(C)
-        Call.append(iC)
 
         Wc = graph_utils.zero_diag(coarsen_matrix(G.W, iC))  # coarsen and remove self-loops
         Wc = (Wc + Wc.T) / 2  # this is only needed to avoid pygsp complaining for tiny errors
@@ -142,22 +136,23 @@ def coarsen(
             Gc = gsp.graphs.Graph(Wc)
         else:
             Gc = gsp.graphs.Graph(Wc, coords=coarsen_vector(G.coords, iC))
-        Gall.append(Gc)
 
         n = Gc.N
         new_num = 0
         in_list = False
-        for i in range(G.N):
+        for i in range(N):
             for sublist in coarsening_list:
-                if i in sublist and i == sublist[0]:
-                    mapping_dict[i] = new_num
-                    new_num += 1
-                    in_list = True
-                    break
-                elif i in sublist and i != sublist[0]:
-                    mapping_dict[i] = mapping_dict[sublist[0]]
-                    in_list = True
-                    break
+                if i in sublist:
+                    if any(j in mapping_dict for j in sublist):
+                        common = np.intersect1d(sublist, list(mapping_dict.keys()))
+                        mapping_dict[i] = mapping_dict[common.item()]
+                        in_list = True
+                        break
+                    else:
+                        mapping_dict[i] = new_num
+                        new_num += 1
+                        in_list = True
+                        break
                 else:
                     in_list = False
             if not in_list:
@@ -167,7 +162,7 @@ def coarsen(
         if n <= n_target:
             break
 
-    return C, Gc, Call, Gall, mapping_dict_list
+    return C, Gc, mapping_dict_list
 
 
 ################################################################################

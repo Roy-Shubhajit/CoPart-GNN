@@ -107,7 +107,7 @@ if __name__ == '__main__':
     parser.add_argument('--weight_decay', type=float, default=0.0005)
     parser.add_argument('--normalize_features', type=bool, default=True)
     parser.add_argument('--coarsening_ratio', type=float, default=0.5)
-    parser.add_argument('--coarsening_method', type=str, default='variation_neighborhoods')
+    parser.add_argument('--coarsening_method', type=str, default='variation_neighborhoods') #'variation_neighborhoods', 'variation_edges', 'variation_cliques', 'heavy_edge', 'algebraic_JC', 'affinity_GS', 'kron'
     parser.add_argument('--output_dir', type=str, required=True)
     args = parser.parse_args()
     path = "save/"+args.output_dir+"/"
@@ -141,16 +141,16 @@ if __name__ == '__main__':
         model1.reset_parameters()
         optimizer1 = torch.optim.Adam(model1.parameters(), lr=args.lr, weight_decay=args.weight_decay)
         #accuracy = Accuracy(task="multiclass", num_classes=args.num_classes).to(device)
-        new_loss = new_loss_fn(args).to(device)
-        #new_loss = torch.nn.NLLLoss().to(device)
+        #new_loss = new_loss_fn(args).to(device)
+        new_loss = torch.nn.NLLLoss().to(device)
         best_val_loss_M1 = float('inf')
         best_val_loss_M2 = float('inf')
         val_loss_history_M1 = []
         val_loss_history_M2  = []
         #training Model 1
         for epoch in tqdm(range(args.epochs1), desc='Training Model 1',ascii=True):
-            train_loss = train_M1(model=model1, x=coarsen_features, edge_index=coarsen_edge, mask=coarsen_train_mask, y=coarsen_train_labels, loss_fn=F.l1_loss, optimizer=optimizer1)
-            val_loss = infer_M1(model=model1, x=coarsen_features, edge_index=coarsen_edge, mask=coarsen_val_mask, y=coarsen_val_labels, loss_fn=F.l1_loss)
+            train_loss = train_M1(model=model1, x=coarsen_features, edge_index=coarsen_edge, mask=coarsen_train_mask, y=coarsen_train_labels, loss_fn=F.nll_loss, optimizer=optimizer1)
+            val_loss = infer_M1(model=model1, x=coarsen_features, edge_index=coarsen_edge, mask=coarsen_val_mask, y=coarsen_val_labels, loss_fn=F.nll_loss)
             if (epoch+1)%5 == 0 or epoch == 0:
                 print(f"Epoch {epoch+1}/{args.epochs1} - Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}")
             if val_loss < best_val_loss_M1 or epoch == 0:
@@ -163,6 +163,7 @@ if __name__ == '__main__':
             param.requires_grad = False
 
         model2 = TransferNet(args, model1).to(device)
+        model2.reset_parameters()
         optimizer2 = torch.optim.Adam(model2.new_lt1.parameters(), lr=args.lr, weight_decay=args.weight_decay)
 
         #training Model 2

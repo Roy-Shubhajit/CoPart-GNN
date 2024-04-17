@@ -246,9 +246,11 @@ def load_data(dataset, candidate, C_list, Gc_list, exp, subgraph_list):
             new_val_mask[mix_mask > 1] = False
 
             coarsen_features = torch.cat([coarsen_features, torch.FloatTensor(C.dot(H_features))], dim=0)
-            coarsen_train_labels = torch.cat([coarsen_train_labels, torch.FloatTensor(C.dot(train_labels))], dim=0)
+            #coarsen_train_labels = torch.cat([coarsen_train_labels, torch.FloatTensor(C.dot(train_labels))], dim=0)
+            coarsen_train_labels = torch.cat([coarsen_train_labels, torch.argmax(torch.FloatTensor(C.dot(train_labels)), dim=1).float()], dim=0)
             coarsen_train_mask = torch.cat([coarsen_train_mask, new_train_mask], dim=0)
-            coarsen_val_labels = torch.cat([coarsen_val_labels, torch.FloatTensor(C.dot(val_labels))], dim=0)
+            #coarsen_val_labels = torch.cat([coarsen_val_labels, torch.FloatTensor(C.dot(val_labels))], dim=0)
+            coarsen_val_labels = torch.cat([coarsen_val_labels, torch.argmax(torch.FloatTensor(C.dot(val_labels)), dim=1).float()], dim=0)
             coarsen_val_mask = torch.cat([coarsen_val_mask, new_val_mask], dim=0)
 
             if coarsen_row is None:
@@ -264,7 +266,7 @@ def load_data(dataset, candidate, C_list, Gc_list, exp, subgraph_list):
         elif torch.sum(H_train_mask)+torch.sum(H_val_mask)>0:
 
             coarsen_features = torch.cat([coarsen_features, H_features], dim=0)
-            H_labels = one_hot(H_labels, n_classes)
+            #H_labels = one_hot(H_labels, n_classes)
             coarsen_train_labels = torch.cat([coarsen_train_labels, H_labels.float()], dim=0)
             coarsen_train_mask = torch.cat([coarsen_train_mask, H_train_mask], dim=0)
             coarsen_val_labels = torch.cat([coarsen_val_labels, H_labels.float()], dim=0)
