@@ -44,8 +44,6 @@ def infer_M1(model, x, edge_index, mask, y, loss_fn):
 
 def train_M2(model, graphs, E_meta, loss_fn, optimizer):
     total_loss = 0
-    #shuffle graphs to avoid overfitting
-    np.random.shuffle(graphs)
     for graph in graphs:
         model.train()
         optimizer.zero_grad()
@@ -101,7 +99,7 @@ if __name__ == '__main__':
     parser.add_argument('--dataset', type=str, default='cora')
     parser.add_argument('--experiment', type=str, default='fixed') #'fixed', 'random', 'few'
     parser.add_argument('--runs', type=int, default=20)
-    parser.add_argument('--hidden', type=int, default=256)
+    parser.add_argument('--hidden', type=int, default=512)
     parser.add_argument('--epochs1', type=int, default=30)
     parser.add_argument('--epochs2', type=int, default=200)
     parser.add_argument('--num_layers1', type=int, default=2)
@@ -109,7 +107,7 @@ if __name__ == '__main__':
     parser.add_argument('--batch_size', type=int, default=1)
     parser.add_argument('--early_stopping', type=int, default=10)
     parser.add_argument('--extra_node', type=bool, default=False)
-    parser.add_argument('--lr', type=float, default=0.001)
+    parser.add_argument('--lr', type=float, default=0.01)
     parser.add_argument('--weight_decay', type=float, default=0.0005)
     parser.add_argument('--normalize_features', type=bool, default=True)
     parser.add_argument('--coarsening_ratio', type=float, default=0.5)
@@ -168,7 +166,7 @@ if __name__ == '__main__':
             if val_loss < best_val_loss_M1 or epoch == 0:
                 print(f"Epoch {epoch+1}/{args.epochs1} - Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}")
                 best_val_loss_M1 = val_loss
-                torch.save(model1.state_dict(), path + 'checkpoint-best-loss-model-1.pkl')
+                torch.save(model1.state_dict(), path+'/model1.pt')
             val_loss_history_M1.append(val_loss)
             run_writer.add_scalar('Model 1 - Loss/train', train_loss, epoch)
             run_writer.add_scalar('Model 1 - Loss/val', val_loss, epoch)
@@ -176,7 +174,7 @@ if __name__ == '__main__':
         
         #training Model 2
         for epoch in tqdm(range(args.epochs2), desc='Training Model 2',ascii=True):
-            model1.load_state_dict(torch.load(path + 'checkpoint-best-loss-model-1.pkl'))
+            model1.load_state_dict(torch.load(path+'/model1.pt'))
             E_meta, val_loss = infer_M1(model=model1, x=coarsen_features, edge_index=coarsen_edge, mask=coarsen_val_mask, y=coarsen_val_labels, loss_fn=F.l1_loss)
 
             train_loss = train_M2(model=model2, graphs=graphs, E_meta=E_meta, loss_fn=new_loss, optimizer=optimizer2)
@@ -186,7 +184,7 @@ if __name__ == '__main__':
             if val_loss < best_val_loss_M2 or epoch == 0:
                 print(f"Epoch {epoch+1}/{args.epochs2} - Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}, Val Accuracy: {val_acc:.4f}")
                 best_val_loss_M2 = val_loss
-                torch.save(model2.state_dict(), path + 'checkpoint-best-loss-model-2.pkl')
+                torch.save(model2.state_dict(), path+'/model2.pt')
             val_loss_history_M2.append(val_loss)
             run_writer.add_scalar('Model 2 - Loss/train', train_loss, epoch)
             run_writer.add_scalar('Model 2 - Loss/val', val_loss, epoch)
@@ -194,8 +192,8 @@ if __name__ == '__main__':
 
         #testing Model 1 and 2
         print("Testing Model 1 and 2")
-        model1.load_state_dict(torch.load(path + 'checkpoint-best-loss-model-1.pkl'))
-        model2.load_state_dict(torch.load(path + 'checkpoint-best-loss-model-2.pkl'))
+        model1.load_state_dict(torch.load(path+'/model1.pt'))
+        model2.load_state_dict(torch.load(path+'/model2.pt'))
         E_meta, test_loss = infer_M1(model=model1, x=coarsen_features, edge_index=coarsen_edge, mask=coarsen_test_mask, y=coarsen_test_labels, loss_fn=F.l1_loss)
         test_loss, test_acc = infer_M2(model=model2, graphs=graphs, E_meta=E_meta, loss_fn=new_loss, infer_type='test')
         writer.add_scalar('Model 2 - Accuracy/test', test_acc, i)
