@@ -147,17 +147,19 @@ def coarsen(
         n = Gc.N
         new_num = 0
         in_list = False
-        for i in range(G.N):
+        for i in range(N):
             for sublist in coarsening_list:
-                if i in sublist and i == sublist[0]:
-                    mapping_dict[i] = new_num
-                    new_num += 1
-                    in_list = True
-                    break
-                elif i in sublist and i != sublist[0]:
-                    mapping_dict[i] = mapping_dict[sublist[0]]
-                    in_list = True
-                    break
+                if i in sublist:
+                    if any(j in mapping_dict for j in sublist):
+                        common = np.intersect1d(sublist, list(mapping_dict.keys()))
+                        mapping_dict[i] = mapping_dict[common.item()]
+                        in_list = True
+                        break
+                    else:
+                        mapping_dict[i] = new_num
+                        new_num += 1
+                        in_list = True
+                        break
                 else:
                     in_list = False
             if not in_list:
