@@ -50,9 +50,10 @@ def train_M2(model, graphs, E_meta, loss_fn, optimizer):
         x = graph.x.to(device)
         y = graph.y.to(device)
         edge_index = graph.edge_index.to(device)
+        ptr = graph.ptr.to(device)
         E_meta_pass = E_meta[graph.meta_idx].to(device)
         if True in graph.train_mask:
-            out = model(x, edge_index, E_meta_pass)
+            out = model(x, edge_index, E_meta_pass, ptr)
             loss = loss_fn(out[graph.train_mask], y[graph.train_mask])
             loss.backward(retain_graph=True)
             optimizer.step()
@@ -70,10 +71,11 @@ def infer_M2(model, graphs, E_meta, loss_fn, infer_type):
         x = graph.x.to(device)
         y = graph.y.to(device)
         edge_index = graph.edge_index.to(device)
+        ptr = graph.ptr.to(device)
         E_meta_pass = E_meta[graph.meta_idx].to(device)
         if infer_type == 'test':
             if True in graph.test_mask:
-                out = model(x, edge_index, E_meta_pass)
+                out = model(x, edge_index, E_meta_pass, ptr)
                 loss = loss_fn(out[graph.test_mask], y[graph.test_mask])
                 total_loss += loss.item()
                 all_out = torch.cat((all_out, torch.max(out[graph.test_mask], dim=1)[1].to(device)), dim=0)
@@ -82,7 +84,7 @@ def infer_M2(model, graphs, E_meta, loss_fn, infer_type):
                 continue
         else:
             if True in graph.val_mask:
-                out = model(x, edge_index, E_meta_pass)
+                out = model(x, edge_index, E_meta_pass, ptr)
                 loss = loss_fn(out[graph.val_mask], y[graph.val_mask])
                 total_loss += loss.item()
                 all_out = torch.cat((all_out, torch.max(out[graph.val_mask], dim=1)[1].to(device)), dim=0)
@@ -149,7 +151,7 @@ if __name__ == '__main__':
         model1.reset_parameters()
         optimizer1 = torch.optim.Adam(model1.parameters(), lr=args.lr, weight_decay=args.weight_decay)
         model2.reset_parameters()
-        optimizer2 = torch.optim.Adam(model2.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+        optimizer2 = torch.optim.Adam(model2.parameters(), lr=0.001, weight_decay=args.weight_decay)
         #accuracy = Accuracy(task="multiclass", num_classes=args.num_classes).to(device)
         #new_loss = new_loss_fn(args).to(device)
         new_loss = torch.nn.NLLLoss().to(device)
@@ -177,8 +179,8 @@ if __name__ == '__main__':
             model1.load_state_dict(torch.load(path+'/model1.pt'))
             E_meta, val_loss = infer_M1(model=model1, x=coarsen_features, edge_index=coarsen_edge, mask=coarsen_val_mask, y=coarsen_val_labels, loss_fn=F.l1_loss)
 
-            train_loss = train_M2(model=model2, graphs=graphs, E_meta=E_meta, loss_fn=new_loss, optimizer=optimizer2)
-            val_loss, val_acc = infer_M2(model=model2, graphs=graphs, E_meta=E_meta, loss_fn=new_loss, infer_type='val')
+            train_loss = train_M2(model=model2, graphs=graph_data, E_meta=E_meta, loss_fn=new_loss, optimizer=optimizer2)
+            val_loss, val_acc = infer_M2(model=model2, graphs=graph_data, E_meta=E_meta, loss_fn=new_loss, infer_type='val')
             #if (epoch+1)%5 == 0 or epoch == 0:
                 
             if val_loss < best_val_loss_M2 or epoch == 0:
@@ -195,7 +197,7 @@ if __name__ == '__main__':
         model1.load_state_dict(torch.load(path+'/model1.pt'))
         model2.load_state_dict(torch.load(path+'/model2.pt'))
         E_meta, test_loss = infer_M1(model=model1, x=coarsen_features, edge_index=coarsen_edge, mask=coarsen_test_mask, y=coarsen_test_labels, loss_fn=F.l1_loss)
-        test_loss, test_acc = infer_M2(model=model2, graphs=graphs, E_meta=E_meta, loss_fn=new_loss, infer_type='test')
+        test_loss, test_acc = infer_M2(model=model2, graphs=graph_data, E_meta=E_meta, loss_fn=new_loss, infer_type='test')
         writer.add_scalar('Model 2 - Accuracy/test', test_acc, i)
         all_acc.append(test_acc)
         print(f"Run {i+1}/{args.runs} - Test Loss: {test_loss:.4f}, Test Accuracy: {test_acc:.4f}")

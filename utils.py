@@ -154,7 +154,7 @@ def index_to_mask(index, size):
     return mask
 
 def splits(data, num_classes, exp):
-    if exp!='fixed':
+    if exp!='fixed' or not hasattr(data, 'train_mask'):
         indices = []
         for i in range(num_classes):
             index = (data.y == i).nonzero().view(-1)

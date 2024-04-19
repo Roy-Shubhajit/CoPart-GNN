@@ -43,11 +43,14 @@ class Net2(torch.nn.Module):
             module.reset_parameters()
         self.lt1.reset_parameters()
 
-    def forward(self, x, edge_index, E_meta):
-        new_w0 = torch.matmul(self.w0, E_meta.reshape(1,-1))
-        new_w0 = torch.add(new_w0, self.b0)
-        new_w0 = F.relu(new_w0)
-        x = torch.matmul(x, new_w0)
+    def forward(self, x, edge_index, E_meta, ptr):
+        new_x = torch.tensor([]).to(x.device)
+        for i, emb in enumerate(E_meta):
+            new_w0 = torch.matmul(self.w0, emb.view(1, -1))
+            new_w0 = torch.add(new_w0, self.b0)
+            new_w0 = F.relu(new_w0)
+            new_x = torch.cat((new_x, torch.matmul(x[ptr[i]:ptr[i+1]], new_w0)), 0)
+        x = new_x
         for i in range(self.num_layers):
             x = self.conv[i](x, edge_index)
             x = F.relu(x)
