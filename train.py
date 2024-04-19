@@ -11,7 +11,7 @@ from torch_geometric.loader import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
+torch.seed = 12345
 class new_loss_fn(torch.nn.Module):
     def __init__(self, args):
         super(new_loss_fn, self).__init__()
@@ -132,44 +132,35 @@ if __name__ == '__main__':
     for i in range(args.runs):
         print(f"####################### Run {i+1}/{args.runs} #######################")
         run_writer = SummaryWriter(path+'/run_'+str(i+1))
-        coarsen_features, coarsen_train_labels, coarsen_train_mask, coarsen_val_labels, coarsen_val_mask, coarsen_test_labels, coarsen_test_mask, coarsen_edge, graphs = load_data(args, 
-            args.dataset, candidate, C_list, Gc_list, args.experiment, map_list)
+        coarsen_features, coarsen_train_labels, coarsen_train_mask, coarsen_val_labels, coarsen_val_mask, coarsen_edge, graphs = load_data(args.dataset, candidate, C_list, Gc_list, args.experiment, map_list)
         coarsen_features = coarsen_features.to(device)
         coarsen_train_labels = coarsen_train_labels.to(device)
         coarsen_train_mask = coarsen_train_mask.to(device)
         coarsen_val_labels = coarsen_val_labels.to(device)
         coarsen_val_mask = coarsen_val_mask.to(device)
-        coarsen_test_labels = coarsen_test_labels.to(device)
-        coarsen_test_mask = coarsen_test_mask.to(device)
         coarsen_edge = coarsen_edge.to(device)
 
         if args.normalize_features:
             coarsen_features = F.normalize(coarsen_features, p=1)
         
         graph_data = DataLoader(graphs, batch_size=args.batch_size, shuffle=True)  
-
         model1.reset_parameters()
         optimizer1 = torch.optim.Adam(model1.parameters(), lr=args.lr, weight_decay=args.weight_decay)
         model2.reset_parameters()
         optimizer2 = torch.optim.Adam(model2.parameters(), lr=0.001, weight_decay=args.weight_decay)
-        #accuracy = Accuracy(task="multiclass", num_classes=args.num_classes).to(device)
         #new_loss = new_loss_fn(args).to(device)
         new_loss = torch.nn.NLLLoss().to(device)
         best_val_loss_M1 = float('inf')
         best_val_loss_M2 = float('inf')
-        val_loss_history_M1 = []
-        val_loss_history_M2  = []
         #training Model 1
         for epoch in tqdm(range(args.epochs1), desc='Training Model 1',ascii=True):
             train_loss = train_M1(model=model1, x=coarsen_features, edge_index=coarsen_edge, mask=coarsen_train_mask, y=coarsen_train_labels, loss_fn=F.l1_loss, optimizer=optimizer1)
             E_meta, val_loss = infer_M1(model=model1, x=coarsen_features, edge_index=coarsen_edge, mask=coarsen_val_mask, y=coarsen_val_labels, loss_fn=F.l1_loss)
-            #if (epoch+1)%5 == 0 or epoch == 0:
                 
             if val_loss < best_val_loss_M1 or epoch == 0:
                 print(f"Epoch {epoch+1}/{args.epochs1} - Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}")
                 best_val_loss_M1 = val_loss
                 torch.save(model1.state_dict(), path+'/model1.pt')
-            val_loss_history_M1.append(val_loss)
             run_writer.add_scalar('Model 1 - Loss/train', train_loss, epoch)
             run_writer.add_scalar('Model 1 - Loss/val', val_loss, epoch)
 
@@ -181,13 +172,11 @@ if __name__ == '__main__':
 
             train_loss = train_M2(model=model2, graphs=graph_data, E_meta=E_meta, loss_fn=new_loss, optimizer=optimizer2)
             val_loss, val_acc = infer_M2(model=model2, graphs=graph_data, E_meta=E_meta, loss_fn=new_loss, infer_type='val')
-            #if (epoch+1)%5 == 0 or epoch == 0:
                 
             if val_loss < best_val_loss_M2 or epoch == 0:
                 print(f"Epoch {epoch+1}/{args.epochs2} - Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}, Val Accuracy: {val_acc:.4f}")
                 best_val_loss_M2 = val_loss
                 torch.save(model2.state_dict(), path+'/model2.pt')
-            val_loss_history_M2.append(val_loss)
             run_writer.add_scalar('Model 2 - Loss/train', train_loss, epoch)
             run_writer.add_scalar('Model 2 - Loss/val', val_loss, epoch)
             run_writer.add_scalar('Model 2 - Accuracy/val', val_acc, epoch)
@@ -196,7 +185,7 @@ if __name__ == '__main__':
         print("Testing Model 1 and 2")
         model1.load_state_dict(torch.load(path+'/model1.pt'))
         model2.load_state_dict(torch.load(path+'/model2.pt'))
-        E_meta, test_loss = infer_M1(model=model1, x=coarsen_features, edge_index=coarsen_edge, mask=coarsen_test_mask, y=coarsen_test_labels, loss_fn=F.l1_loss)
+        E_meta, test_loss = infer_M1(model=model1, x=coarsen_features, edge_index=coarsen_edge, mask=coarsen_val_mask, y=coarsen_val_labels, loss_fn=F.l1_loss)
         test_loss, test_acc = infer_M2(model=model2, graphs=graph_data, E_meta=E_meta, loss_fn=new_loss, infer_type='test')
         writer.add_scalar('Model 2 - Accuracy/test', test_acc, i)
         all_acc.append(test_acc)

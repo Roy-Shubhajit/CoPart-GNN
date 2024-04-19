@@ -20,7 +20,7 @@ class Net1(torch.nn.Module):
     def forward(self, x, edge_index):
         for i in range(self.num_layers):
             x = self.conv[i](x, edge_index)
-            x = F.relu(x)
+            x = F.elu(x)
             x = F.dropout(x, training=self.training)
         z = self.lt1(x)
         return z, x
@@ -48,12 +48,12 @@ class Net2(torch.nn.Module):
         for i, emb in enumerate(E_meta):
             new_w0 = torch.matmul(self.w0, emb.view(1, -1))
             new_w0 = torch.add(new_w0, self.b0)
-            new_w0 = F.relu(new_w0)
+            new_w0 = F.elu(new_w0)
             new_x = torch.cat((new_x, torch.matmul(x[ptr[i]:ptr[i+1]], new_w0)), 0)
         x = new_x
         for i in range(self.num_layers):
             x = self.conv[i](x, edge_index)
-            x = F.relu(x)
+            x = F.elu(x)
             x = F.dropout(x, training=self.training)
         x = self.lt1(x)
         return F.log_softmax(x, dim=1)

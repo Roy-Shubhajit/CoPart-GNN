@@ -176,7 +176,7 @@ def splits(data, num_classes, exp):
 
     return data
 
-def load_data(args, dataset, candidate, C_list, Gc_list, exp, subgraph_list):
+def load_data(dataset, candidate, C_list, Gc_list, exp, subgraph_list):
     if dataset == 'dblp':
         dataset = CitationFull(root='./dataset', name=dataset)
     elif dataset == 'Physics':
@@ -200,8 +200,6 @@ def load_data(args, dataset, candidate, C_list, Gc_list, exp, subgraph_list):
     coarsen_train_mask = torch.Tensor([]).bool()
     coarsen_val_labels = torch.Tensor([])
     coarsen_val_mask = torch.Tensor([]).bool()
-    coarsen_test_labels = torch.Tensor([])
-    coarsen_test_mask = torch.Tensor([]).bool()
 
     new_graphs = []
 
@@ -233,7 +231,6 @@ def load_data(args, dataset, candidate, C_list, Gc_list, exp, subgraph_list):
         H_labels = labels[keep]
         H_train_mask = train_mask[keep]
         H_val_mask = val_mask[keep]
-        H_test_mask = test_mask[keep]
 
         #if len(H.info['orig_idx']) > 10 and torch.sum(H_train_mask)+torch.sum(H_val_mask) > 0:
         if torch.sum(H_train_mask)+torch.sum(H_val_mask) > 0:
@@ -241,8 +238,6 @@ def load_data(args, dataset, candidate, C_list, Gc_list, exp, subgraph_list):
             train_labels[~H_train_mask] = torch.Tensor([0 for _ in range(n_classes)])
             val_labels = one_hot(H_labels, n_classes)
             val_labels[~H_val_mask] = torch.Tensor([0 for _ in range(n_classes)])
-            test_labels = one_hot(H_labels, n_classes)
-            test_labels[~H_val_mask] = torch.Tensor([0 for _ in range(n_classes)])
 
             new_train_mask = torch.BoolTensor(np.sum(C.dot(train_labels), axis=1))
             mix_label = torch.FloatTensor(C.dot(train_labels))
@@ -256,12 +251,6 @@ def load_data(args, dataset, candidate, C_list, Gc_list, exp, subgraph_list):
             mix_mask = torch.sum(mix_label, dim=1)
             new_val_mask[mix_mask > 1] = False
 
-            new_test_mask = torch.BoolTensor(np.sum(C.dot(test_labels), axis=1))
-            mix_label = torch.FloatTensor(C.dot(test_labels))
-            mix_label[mix_label > 0] = 1
-            mix_mask = torch.sum(mix_label, dim=1)
-            new_test_mask[mix_mask > 1] = False
-
             coarsen_features = torch.cat([coarsen_features, torch.FloatTensor(C.dot(H_features))], dim=0)
             #coarsen_train_labels = torch.cat([coarsen_train_labels, torch.argmax(torch.FloatTensor(C.dot(train_labels)), dim=1).float()], dim=0)
             coarsen_train_labels = torch.cat([coarsen_train_labels, torch.FloatTensor(C.dot(train_labels))], dim=0)
@@ -269,8 +258,6 @@ def load_data(args, dataset, candidate, C_list, Gc_list, exp, subgraph_list):
             #coarsen_val_labels = torch.cat([coarsen_val_labels, torch.argmax(torch.FloatTensor(C.dot(val_labels)), dim=1).float()], dim=0) 
             coarsen_val_labels = torch.cat([coarsen_val_labels, torch.FloatTensor(C.dot(val_labels))], dim=0)
             coarsen_val_mask = torch.cat([coarsen_val_mask, new_val_mask], dim=0)
-            coarsen_test_labels = torch.cat([coarsen_test_labels, torch.FloatTensor(C.dot(test_labels))], dim=0)
-            coarsen_test_mask = torch.cat([coarsen_test_mask, new_test_mask], dim=0)
 
             if coarsen_row is None:
                 coarsen_row = Gc.W.tocoo().row
@@ -290,8 +277,6 @@ def load_data(args, dataset, candidate, C_list, Gc_list, exp, subgraph_list):
             coarsen_train_mask = torch.cat([coarsen_train_mask, H_train_mask], dim=0)
             coarsen_val_labels = torch.cat([coarsen_val_labels, one_hot(H_labels, n_classes).float()], dim=0)
             coarsen_val_mask = torch.cat([coarsen_val_mask, H_val_mask], dim=0)
-            coarsen_test_labels = torch.cat([coarsen_test_labels, one_hot(H_labels, n_classes).float()], dim=0)
-            coarsen_test_mask = torch.cat([coarsen_test_mask, H_test_mask], dim=0)
 
             if coarsen_row is None:
                 #raise Exception('The graph does not need coarsening.')
@@ -310,7 +295,5 @@ def load_data(args, dataset, candidate, C_list, Gc_list, exp, subgraph_list):
     coarsen_edge = np.array([coarsen_row, coarsen_col])
     coarsen_edge = torch.LongTensor(coarsen_edge)
     coarsen_train_labels = coarsen_train_labels.long()
-    coarsen_val_labels = coarsen_val_labels.long()
-    coarsen_test_labels = coarsen_test_labels.long()
 
-    return coarsen_features, coarsen_train_labels, coarsen_train_mask, coarsen_val_labels, coarsen_val_mask, coarsen_test_labels, coarsen_test_mask, coarsen_edge, new_graphs
+    return coarsen_features, coarsen_train_labels, coarsen_train_mask, coarsen_val_labels, coarsen_val_mask, coarsen_edge, new_graphs
