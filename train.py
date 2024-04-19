@@ -1,7 +1,6 @@
 import argparse
 import torch.nn.functional as F
 import torch
-from torch import tensor
 from network import Net1, Net2
 import numpy as np
 from utils import load_data, coarsening, create_distribution_tensor
@@ -11,7 +10,6 @@ from torch_geometric.loader import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-torch.seed = 12345
 class new_loss_fn(torch.nn.Module):
     def __init__(self, args):
         super(new_loss_fn, self).__init__()
@@ -102,7 +100,7 @@ if __name__ == '__main__':
     parser.add_argument('--experiment', type=str, default='fixed') #'fixed', 'random', 'few'
     parser.add_argument('--runs', type=int, default=20)
     parser.add_argument('--hidden', type=int, default=512)
-    parser.add_argument('--epochs1', type=int, default=30)
+    parser.add_argument('--epochs1', type=int, default=100)
     parser.add_argument('--epochs2', type=int, default=200)
     parser.add_argument('--num_layers1', type=int, default=2)
     parser.add_argument('--num_layers2', type=int, default=2)
@@ -146,8 +144,6 @@ if __name__ == '__main__':
         graph_data = DataLoader(graphs, batch_size=args.batch_size, shuffle=True)  
         model1.reset_parameters()
         optimizer1 = torch.optim.Adam(model1.parameters(), lr=args.lr, weight_decay=args.weight_decay)
-        model2.reset_parameters()
-        optimizer2 = torch.optim.Adam(model2.parameters(), lr=0.001, weight_decay=args.weight_decay)
         #new_loss = new_loss_fn(args).to(device)
         new_loss = torch.nn.NLLLoss().to(device)
         best_val_loss_M1 = float('inf')
@@ -164,12 +160,12 @@ if __name__ == '__main__':
             run_writer.add_scalar('Model 1 - Loss/train', train_loss, epoch)
             run_writer.add_scalar('Model 1 - Loss/val', val_loss, epoch)
 
-        
+        model1.load_state_dict(torch.load(path+'/model1.pt'))
+        model2.reset_parameters()
+        optimizer2 = torch.optim.Adam(model2.parameters(), lr=0.001, weight_decay=args.weight_decay)
         #training Model 2
         for epoch in tqdm(range(args.epochs2), desc='Training Model 2',ascii=True):
-            model1.load_state_dict(torch.load(path+'/model1.pt'))
             E_meta, val_loss = infer_M1(model=model1, x=coarsen_features, edge_index=coarsen_edge, mask=coarsen_val_mask, y=coarsen_val_labels, loss_fn=F.l1_loss)
-
             train_loss = train_M2(model=model2, graphs=graph_data, E_meta=E_meta, loss_fn=new_loss, optimizer=optimizer2)
             val_loss, val_acc = infer_M2(model=model2, graphs=graph_data, E_meta=E_meta, loss_fn=new_loss, infer_type='val')
                 
@@ -183,7 +179,6 @@ if __name__ == '__main__':
 
         #testing Model 1 and 2
         print("Testing Model 1 and 2")
-        model1.load_state_dict(torch.load(path+'/model1.pt'))
         model2.load_state_dict(torch.load(path+'/model2.pt'))
         E_meta, test_loss = infer_M1(model=model1, x=coarsen_features, edge_index=coarsen_edge, mask=coarsen_val_mask, y=coarsen_val_labels, loss_fn=F.l1_loss)
         test_loss, test_acc = infer_M2(model=model2, graphs=graph_data, E_meta=E_meta, loss_fn=new_loss, infer_type='test')
