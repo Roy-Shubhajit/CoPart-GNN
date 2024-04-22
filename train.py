@@ -7,6 +7,7 @@ import numpy as np
 from utils import load_data, coarsening, create_distribution_tensor
 import os
 from tqdm import tqdm
+import time
 from torch_geometric.loader import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
@@ -62,6 +63,7 @@ def train_M2(model, graph_data, loss_fn, optimizer):
 
 def infer_M2(model, graph_data, loss_fn, infer_type):
     total_loss = 0
+    total_time = 0
     all_out = torch.tensor([], dtype=torch.float32).to(device)
     all_label = torch.tensor([], dtype=torch.float32).to(device)
     for graph in graph_data:
@@ -71,7 +73,10 @@ def infer_M2(model, graph_data, loss_fn, infer_type):
         edge_index = graph.edge_index.to(device)
         if infer_type == 'test':
             if True in graph.test_mask:
+                start_time = time.time()
                 out = model(x, edge_index)
+                
+                total_time += time.time() - start_time
                 loss = loss_fn(out[graph.test_mask], y[graph.test_mask])
                 total_loss += loss.item()
                 all_out = torch.cat((all_out, torch.max(out[graph.test_mask], dim=1)[1].to(device)), dim=0)
@@ -88,7 +93,7 @@ def infer_M2(model, graph_data, loss_fn, infer_type):
             else:
                 continue
     
-    return total_loss / len(graphs), int(all_out.eq(all_label).sum().item()) / int(all_label.shape[0])
+    return total_loss / len(graphs), int(all_out.eq(all_label).sum().item()) / int(all_label.shape[0]), total_time
         
 
 
@@ -98,8 +103,8 @@ if __name__ == '__main__':
     parser.add_argument('--experiment', type=str, default='fixed') #'fixed', 'random', 'few'
     parser.add_argument('--runs', type=int, default=20)
     parser.add_argument('--hidden', type=int, default=512)
-    parser.add_argument('--epochs1', type=int, default=200)
-    parser.add_argument('--epochs2', type=int, default=200)
+    parser.add_argument('--epochs1', type=int, default=50)
+    parser.add_argument('--epochs2', type=int, default=100)
     parser.add_argument('--num_layers1', type=int, default=2)
     parser.add_argument('--num_layers2', type=int, default=2)
     parser.add_argument('--batch_size', type=int, default=1)
@@ -122,7 +127,7 @@ if __name__ == '__main__':
     print('num_features: {}, num_classes: {}'.format(args.num_features, args.num_classes))
     print('Number of components: {}'.format(len(candidate)))
     all_acc = []
-
+    all_time = []
     for i in range(args.runs):
         print(f"####################### Run {i+1}/{args.runs} #######################")
         run_writer = SummaryWriter(path+'/run_'+str(i+1))
@@ -147,6 +152,7 @@ if __name__ == '__main__':
         new_loss = torch.nn.NLLLoss().to(device)
         best_val_loss_M1 = float('inf')
         best_val_loss_M2 = float('inf')
+        best_val_acc_M2 = 0
         val_loss_history_M1 = []
         val_loss_history_M2  = []
         #training Model 1
@@ -164,33 +170,35 @@ if __name__ == '__main__':
             run_writer.add_scalar('Model 1 - Loss/val', val_loss, epoch)
 
         model1.load_state_dict(torch.load(path+'/model1.pt'))
-        for param in model1.conv.parameters():
-            param.requires_grad = False
+        #for param in model1.conv.parameters():
+            #param.requires_grad = False
 
-        model2 = TransferNet(args, model1).to(device)
-        model2.reset_parameters()
-        optimizer2 = torch.optim.Adam(model2.new_lt1.parameters(), lr=0.01, weight_decay=args.weight_decay)
+        #model2 = TransferNet(args, model1).to(device)
+        #model2.reset_parameters()
+        #optimizer2 = torch.optim.Adam(model2.new_lt1.parameters(), lr=0.003, weight_decay=args.weight_decay)
 
         #training Model 2
         for epoch in tqdm(range(args.epochs2), desc='Training Model 2',ascii=True):
-            train_loss = train_M2(model2, graph_data, new_loss, optimizer2)
-            val_loss, val_acc = infer_M2(model2, graph_data, new_loss, 'val')
+            train_loss = train_M2(model1, graph_data, new_loss, optimizer1)
+            val_loss, val_acc, val_time = infer_M2(model1, graph_data, new_loss, 'val')
             #if (epoch+1)%5 == 0 or epoch == 0:
                 #print(f"Epoch {epoch+1}/{args.epochs2} - Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}, Val Accuracy: {val_acc:.4f}")
             if val_loss < best_val_loss_M2 or epoch == 0:
                 print(f"Epoch {epoch+1}/{args.epochs2} - Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}, Val Accuracy: {val_acc:.4f}")
                 best_val_loss_M2 = val_loss
-                torch.save(model2.state_dict(), path+'/model2.pt')
+                torch.save(model1.state_dict(), path+'/model2.pt')
             val_loss_history_M2.append(val_loss)
             run_writer.add_scalar('Model 2 - Loss/train', train_loss, epoch)
             run_writer.add_scalar('Model 2 - Loss/val', val_loss, epoch)
             run_writer.add_scalar('Model 2 - Accuracy/val', val_acc, epoch)
 
-        best_model2 = model2.load_state_dict(torch.load(path+'/model2.pt'))
-        test_loss, test_acc = infer_M2(model2, graph_data, new_loss, 'test')
+        best_model2 = model1.load_state_dict(torch.load(path+'/model2.pt'))
+        test_loss, test_acc, test_time = infer_M2(model1, graph_data, new_loss, 'test')
         writer.add_scalar('Model 2 - Accuracy/test', test_acc, i)
         all_acc.append(test_acc)
-        print(f"Run {i+1}/{args.runs} - Test Loss: {test_loss:.4f}, Test Accuracy: {test_acc:.4f}")
+        all_time.append(test_time)
+        print(f"Run {i+1}/{args.runs} - Test Loss: {test_loss:.4f}, Test Accuracy: {test_acc:.4f}, Test Time: {test_time:.4f} sec")
         print("#####################################################################")
     print('ave_acc: {:.4f}'.format(np.mean(all_acc)), '+/- {:.4f}'.format(np.std(all_acc)))
+    print('ave_time: {:.4f}'.format(np.mean(all_time)), '+/- {:.4f}'.format(np.std(all_time)))
 

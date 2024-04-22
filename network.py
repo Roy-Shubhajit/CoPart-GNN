@@ -22,8 +22,8 @@ class Net1(torch.nn.Module):
             x = self.conv[i](x, edge_index)
             x = F.elu(x)
             x = F.dropout(x, training=self.training)
-        z = self.lt1(x)
-        return F.log_softmax(z, dim=1)
+        x = self.lt1(x)
+        return F.log_softmax(x, dim=1)
     
 class TransferNet(torch.nn.Module):
     def __init__(self, args, model1):

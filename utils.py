@@ -124,6 +124,7 @@ def coarsening(args, coarsening_ratio, coarsening_method):
             mapping_dict = metanode_to_node_mapping_new(subgraph_mapping(mapping_dict_list), original_map)
             for key, value in mapping_dict.items():
                 value = torch.LongTensor(value).to(device)
+                actual_ext = torch.LongTensor([])
                 if args.extra_node:
                     ext_nodes = neighbor(data, value)
                     actual_ext = ext_nodes[~torch.isin(ext_nodes, value)].to(device)
@@ -143,6 +144,7 @@ def coarsening(args, coarsening_ratio, coarsening_method):
             mapping_dict = metanode_to_node_mapping_new(subgraph_mapping([{0: 0}]), original_map)
             for key, value in mapping_dict.items():
                 value = torch.LongTensor(value).to(device)
+                actual_ext = torch.LongTensor([])
                 if args.extra_node:
                     ext_nodes = neighbor(data, value)
                     actual_ext = ext_nodes[~torch.isin(ext_nodes, value)].to(device)
