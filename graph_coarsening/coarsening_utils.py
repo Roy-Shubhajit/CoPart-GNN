@@ -143,9 +143,9 @@ def coarsen(
         for i in range(N):
             for sublist in coarsening_list:
                 if i in sublist:
-                    if any(j in mapping_dict for j in sublist):
+                    if any(j in list(mapping_dict.keys()) for j in sublist):
                         common = np.intersect1d(sublist, list(mapping_dict.keys()))
-                        mapping_dict[i] = mapping_dict[common.item()]
+                        mapping_dict[i] = mapping_dict[common[0]]
                         in_list = True
                         break
                     else:

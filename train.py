@@ -101,13 +101,13 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--dataset', type=str, default='cora')
     parser.add_argument('--experiment', type=str, default='fixed') #'fixed', 'random', 'few'
-    parser.add_argument('--runs', type=int, default=20)
+    parser.add_argument('--runs', type=int, default=50)
     parser.add_argument('--hidden', type=int, default=512)
-    parser.add_argument('--epochs1', type=int, default=50)
-    parser.add_argument('--epochs2', type=int, default=100)
+    parser.add_argument('--epochs1', type=int, default=100)
+    parser.add_argument('--epochs2', type=int, default=200)
     parser.add_argument('--num_layers1', type=int, default=2)
     parser.add_argument('--num_layers2', type=int, default=2)
-    parser.add_argument('--batch_size', type=int, default=1)
+    parser.add_argument('--batch_size', type=int, default=128)
     parser.add_argument('--early_stopping', type=int, default=10)
     parser.add_argument('--extra_node', type=bool, default=False)
     parser.add_argument('--lr', type=float, default=0.01)
@@ -124,12 +124,12 @@ if __name__ == '__main__':
         os.makedirs(path)
     writer = SummaryWriter(path)
     args.num_features, args.num_classes, candidate, C_list, Gc_list, subgraph_list = coarsening(args, 1-args.coarsening_ratio, args.coarsening_method)
-    print('num_features: {}, num_classes: {}'.format(args.num_features, args.num_classes))
-    print('Number of components: {}'.format(len(candidate)))
+    #print('num_features: {}, num_classes: {}'.format(args.num_features, args.num_classes))
+    #print('Number of components: {}'.format(len(candidate)))
     all_acc = []
     all_time = []
     for i in range(args.runs):
-        print(f"####################### Run {i+1}/{args.runs} #######################")
+        #print(f"####################### Run {i+1}/{args.runs} #######################")
         run_writer = SummaryWriter(path+'/run_'+str(i+1))
         coarsen_features, coarsen_train_labels, coarsen_train_mask, coarsen_val_labels, coarsen_val_mask, coarsen_edge, graphs = load_data(args.dataset, candidate, C_list, Gc_list, args.experiment, subgraph_list)
         coarsen_features = coarsen_features.to(device)
@@ -162,7 +162,7 @@ if __name__ == '__main__':
             #if (epoch+1)%5 == 0 or epoch == 0:
                 #print(f"Epoch {epoch+1}/{args.epochs1} - Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}")
             if val_loss < best_val_loss_M1 or epoch == 0:
-                print(f"Epoch {epoch+1}/{args.epochs1} - Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}")
+                #print(f"Epoch {epoch+1}/{args.epochs1} - Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}")
                 best_val_loss_M1 = val_loss
                 torch.save(model1.state_dict(), path+'/model1.pt')
             val_loss_history_M1.append(val_loss)
@@ -184,7 +184,7 @@ if __name__ == '__main__':
             #if (epoch+1)%5 == 0 or epoch == 0:
                 #print(f"Epoch {epoch+1}/{args.epochs2} - Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}, Val Accuracy: {val_acc:.4f}")
             if val_loss < best_val_loss_M2 or epoch == 0:
-                print(f"Epoch {epoch+1}/{args.epochs2} - Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}, Val Accuracy: {val_acc:.4f}")
+                #print(f"Epoch {epoch+1}/{args.epochs2} - Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}, Val Accuracy: {val_acc:.4f}")
                 best_val_loss_M2 = val_loss
                 torch.save(model1.state_dict(), path+'/model2.pt')
             val_loss_history_M2.append(val_loss)
@@ -197,8 +197,34 @@ if __name__ == '__main__':
         writer.add_scalar('Model 2 - Accuracy/test', test_acc, i)
         all_acc.append(test_acc)
         all_time.append(test_time)
-        print(f"Run {i+1}/{args.runs} - Test Loss: {test_loss:.4f}, Test Accuracy: {test_acc:.4f}, Test Time: {test_time:.4f} sec")
-        print("#####################################################################")
-    print('ave_acc: {:.4f}'.format(np.mean(all_acc)), '+/- {:.4f}'.format(np.std(all_acc)))
-    print('ave_time: {:.4f}'.format(np.mean(all_time)), '+/- {:.4f}'.format(np.std(all_time)))
+        #print(f"Run {i+1}/{args.runs} - Test Loss: {test_loss:.4f}, Test Accuracy: {test_acc:.4f}, Test Time: {test_time:.4f} sec")
+        #print("#####################################################################")
+    #print('ave_acc: {:.4f}'.format(np.mean(all_acc)), '+/- {:.4f}'.format(np.std(all_acc)))
+    #print('ave_time: {:.4f}'.format(np.mean(all_time)), '+/- {:.4f}'.format(np.std(all_time)))
+    #print mean and std of top 10 runs
+    top_acc = sorted(all_acc, reverse=True)[:10]
+    #print('top_10_ave_acc: {:.4f}'.format(np.mean(top_acc)), '+/- {:.4f}'.format(np.std(top_acc)))
+
+    #check whether f"results/{args.dataset}.csv" is present or not, if not create and write a line
+    if not os.path.exists(f"results/{args.dataset}.csv"):
+        with open(f"results/{args.dataset}.csv", 'w') as f:
+            f.write('dataset,experiment,hidden,runs,num_layers,batch_size,lr,coarsening_ratio,coarsening_method,ave_acc,ave_time,top_10_acc\n')
+    #write the results to the csv file
+    with open(f"results/{args.dataset}.csv", 'a') as f:
+        f.write(f"{args.dataset},{args.experiment},{args.hidden},{args.runs},{args.num_layers1},{args.batch_size},{args.lr},{args.coarsening_ratio},{args.coarsening_method},{np.mean(all_acc)},{np.mean(all_time)},{np.mean(top_acc)}\n")
+    print("#####################################################################")
+    print(f"dataset: {args.dataset}")
+    print(f"experiment: {args.experiment}")
+    print(f"hidden: {args.hidden}")
+    print(f"runs: {args.runs}")
+    print(f"num_layers: {args.num_layers1}")
+    print(f"batch_size: {args.batch_size}")
+    print(f"lr: {args.lr}")
+    print(f"coarsening_ratio: {args.coarsening_ratio}")
+    print(f"coarsening_method: {args.coarsening_method}")
+    print(f"ave_acc: {np.mean(all_acc)}")
+    print(f"ave_time: {np.mean(all_time)}")
+    print(f"top_10_acc: {np.mean(top_acc)}")
+    print("#####################################################################")
+
 

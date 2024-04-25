@@ -161,7 +161,7 @@ def coarsening(args, coarsening_ratio, coarsening_method):
                 M.to(device)
                 subgraph_list.append(M)
         number += 1
-    print("Subgraphs created, number of subgraphs: ", len(subgraph_list))
+    #print("Subgraphs created, number of subgraphs: ", len(subgraph_list))
     return data.x.shape[1], num_classes, candidate, C_list, Gc_list, subgraph_list
 
 def index_to_mask(index, size):
@@ -306,7 +306,7 @@ def load_data(dataset, candidate, C_list, Gc_list, exp, subgraph_list):
             coarsen_node += H.W.shape[0]
         number += 1
 
-    print('the size of coarsen graph features:', coarsen_features.shape)
+    #print('the size of coarsen graph features:', coarsen_features.shape)
     coarsen_edge = np.array([coarsen_row, coarsen_col])
     coarsen_edge = torch.LongTensor(coarsen_edge)
     coarsen_train_labels = coarsen_train_labels.long()
