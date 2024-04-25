@@ -156,7 +156,8 @@ if __name__ == '__main__':
         val_loss_history_M1 = []
         val_loss_history_M2  = []
         #training Model 1
-        for epoch in tqdm(range(args.epochs1), desc='Training Model 1',ascii=True):
+        #for epoch in tqdm(range(args.epochs1), desc='Training Model 1',ascii=True):
+        for epoch in range(args.epochs1):
             train_loss = train_M1(model=model1, x=coarsen_features, edge_index=coarsen_edge, mask=coarsen_train_mask, y=coarsen_train_labels, loss_fn=F.nll_loss, optimizer=optimizer1)
             val_loss = infer_M1(model=model1, x=coarsen_features, edge_index=coarsen_edge, mask=coarsen_val_mask, y=coarsen_val_labels, loss_fn=F.nll_loss)
             #if (epoch+1)%5 == 0 or epoch == 0:
@@ -178,7 +179,8 @@ if __name__ == '__main__':
         #optimizer2 = torch.optim.Adam(model2.new_lt1.parameters(), lr=0.003, weight_decay=args.weight_decay)
 
         #training Model 2
-        for epoch in tqdm(range(args.epochs2), desc='Training Model 2',ascii=True):
+        #for epoch in tqdm(range(args.epochs2), desc='Training Model 2',ascii=True):
+        for epoch in range(args.epochs2):
             train_loss = train_M2(model1, graph_data, new_loss, optimizer1)
             val_loss, val_acc, val_time = infer_M2(model1, graph_data, new_loss, 'val')
             #if (epoch+1)%5 == 0 or epoch == 0:
@@ -222,9 +224,9 @@ if __name__ == '__main__':
     print(f"lr: {args.lr}")
     print(f"coarsening_ratio: {args.coarsening_ratio}")
     print(f"coarsening_method: {args.coarsening_method}")
-    print(f"ave_acc: {np.mean(all_acc)}")
+    print(f"ave_acc: {np.mean(all_acc)} +/- {np.std(all_acc)}")
     print(f"ave_time: {np.mean(all_time)}")
-    print(f"top_10_acc: {np.mean(top_acc)}")
+    print(f"top_10_acc: {np.mean(top_acc)} +/- {np.std(top_acc)}")
     print("#####################################################################")
 
 
