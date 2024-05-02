@@ -9,7 +9,7 @@ for dataset in cora citeseer pubmed
 do
     for coarsening_method in variation_neighborhoods algebraic_JC
     do
-        for coarsening_ratio in 0.1 0.3 0.5 0.7 0.9
+        for coarsening_ratio in 0.1 0.3 0.5 0.7 1.0
         do
             c=$(echo $coarsening_ratio | sed 's/\.//g')
             output_dir=$dataset$underscore$exp_fixed$underscore$c$underscore$transfer$underscore$extra$underscore$coarsening_method
@@ -24,7 +24,7 @@ for dataset in Physics dblp
 do
     for coarsening_method in variation_neighborhoods affinity_GS
     do
-        for coarsening_ratio in 0.1 0.3 0.5 0.7 0.9
+        for coarsening_ratio in 0.1 0.3 0.5 0.7 1.0
         do
             c=$(echo $coarsening_ratio | sed 's/\.//g')
             output_dir=$dataset$underscore$exp_random$underscore$c$underscore$transfer$underscore$extra$underscore$coarsening_method

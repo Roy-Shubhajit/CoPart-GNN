@@ -54,7 +54,7 @@ def train_M2(model, graph_data, loss_fn, optimizer):
             edge_index = graph.edge_index.to(device)
             out = model(x, edge_index)
             loss = loss_fn(out[graph.train_mask], y[graph.train_mask])
-            loss.backward(retain_graph=True)
+            loss.backward()
             optimizer.step()
             total_loss += loss.item()
         else:
@@ -104,13 +104,13 @@ if __name__ == '__main__':
     parser.add_argument('--runs', type=int, default=50)
     parser.add_argument('--hidden', type=int, default=512)
     parser.add_argument('--epochs1', type=int, default=100)
-    parser.add_argument('--epochs2', type=int, default=200)
+    parser.add_argument('--epochs2', type=int, default=300)
     parser.add_argument('--num_layers1', type=int, default=2)
     parser.add_argument('--num_layers2', type=int, default=2)
     parser.add_argument('--batch_size', type=int, default=128)
     parser.add_argument('--early_stopping', type=int, default=10)
     parser.add_argument('--extra_node', type=bool, default=False)
-    parser.add_argument('--lr', type=float, default=0.01)
+    parser.add_argument('--lr', type=float, default=0.001)
     parser.add_argument('--weight_decay', type=float, default=0.0005)
     parser.add_argument('--normalize_features', type=bool, default=True)
     parser.add_argument('--coarsening_ratio', type=float, default=0.5)
@@ -142,7 +142,8 @@ if __name__ == '__main__':
         if args.normalize_features:
             coarsen_features = F.normalize(coarsen_features, p=1)
         
-        graph_data = DataLoader(graphs, batch_size=args.batch_size, shuffle=True)  
+        #graph_data = DataLoader(graphs, batch_size=args.batch_size, shuffle=True)  
+        graph_data = DataLoader(graphs, batch_size=len(graphs), shuffle=True) 
 
         model1 = Net1(args).to(device)
         model1.reset_parameters()
@@ -210,13 +211,14 @@ if __name__ == '__main__':
     #check whether f"results/{args.dataset}.csv" is present or not, if not create and write a line
     if not os.path.exists(f"results/{args.dataset}.csv"):
         with open(f"results/{args.dataset}.csv", 'w') as f:
-            f.write('dataset,experiment,hidden,runs,num_layers,batch_size,lr,coarsening_ratio,coarsening_method,ave_acc,ave_time,top_10_acc\n')
+            f.write('dataset,coarsening_method,coarsening_ratio,experiment,extra_nodes,hidden,runs,num_layers,batch_size,lr,ave_acc,ave_time,top_10_acc\n')
     #write the results to the csv file
     with open(f"results/{args.dataset}.csv", 'a') as f:
-        f.write(f"{args.dataset},{args.experiment},{args.hidden},{args.runs},{args.num_layers1},{args.batch_size},{args.lr},{args.coarsening_ratio},{args.coarsening_method},{np.mean(all_acc)},{np.mean(all_time)},{np.mean(top_acc)}\n")
+        f.write(f"{args.dataset},{args.coarsening_method},{args.coarsening_ratio},{args.experiment},{args.extra_node},{args.hidden},{args.runs},{args.num_layers1},{args.batch_size},{args.lr},{np.mean(all_acc)} +/- {np.std(all_acc)},{np.mean(all_time)},{np.mean(top_acc)} +/- {np.std(top_acc)}\n")
     print("#####################################################################")
     print(f"dataset: {args.dataset}")
     print(f"experiment: {args.experiment}")
+    print(f"extra_nodes: {args.extra_node}")
     print(f"hidden: {args.hidden}")
     print(f"runs: {args.runs}")
     print(f"num_layers: {args.num_layers1}")
