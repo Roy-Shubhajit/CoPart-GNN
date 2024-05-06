@@ -92,18 +92,44 @@ def metanode_to_node_mapping_new(map_dict, orig_dict):
             temp[metanode].append(orig_dict[node])
     return temp
 
-def coarsening(args, dataset, coarsening_ratio, coarsening_method):
+
+#     #########################################################################
+#     # Updated Code
+# def coarsening(dataset, coarsening_ratio, coarsening_method, Dataset = None): # Added the `Dataset` parameter to pass the desired `torch_geometric.datasets` class. 
+#     if dataset == 'dblp':
+#         dataset = CitationFull(root='./dataset', name=dataset)
+#     elif dataset == 'Physics':
+#         dataset = Coauthor(root='./dataset/Physics', name=dataset)
+#     elif dataset == 'test.ipynb':           # Only when we need to run experiments in test.ipynb file. In that case, `dataset` = 'test.ipynb' and `Dataset` = dataset class that we want to experiment with.
+#         data = Dataset
+#     else:
+#         dataset = Planetoid(root='./dataset', name=dataset)
+#     if Dataset == None:
+#         data = dataset[0]
+#     print(f"Data Verfication: {data}")      # Just for verifying the details of the graph objects
+#     G = gsp.graphs.Graph(W=to_dense_adj(data.edge_index, max_num_nodes=len(data.x))[0]) ######## VERY IMPORTANT MODIFICATION ADDED ###########: max_num_nodes=len(data.x) (wouldn't work without this)
+#     ########################################################################
+
+
+    ########################################################################
+    # Updated Code
+def coarsening(args, dataset, coarsening_ratio, coarsening_method, Dataset = None): # Added the `Dataset` parameter to pass the desired `torch_geometric.datasets` class. 
     if dataset == 'dblp':
         dataset = CitationFull(root='./dataset', name=dataset)
     elif dataset == 'Physics':
         dataset = Coauthor(root='./dataset/Physics', name=dataset)
+    elif dataset == 'test.ipynb':           # Only when we need to run experiments in test.ipynb file. In that case, `dataset` = 'test.ipynb' and `Dataset` = dataset class that we want to experiment with.
+        data = Dataset
     else:
         dataset = Planetoid(root='./dataset', name=dataset)
-    data = dataset[0]
+    if Dataset == None:
+        data = dataset[0]
     num_classes = len(set(np.array(data.y)))
     if args.normalize_features:
         data.x = torch.nn.functional.normalize(data.x, p=1)
-    G = gsp.graphs.Graph(W=to_dense_adj(data.edge_index)[0])
+    print(f"Data Verfication: {data}")      # Just for verifying the details of the graph objects
+    G = gsp.graphs.Graph(W=to_dense_adj(data.edge_index, max_num_nodes=len(data.x))[0]) ######## VERY IMPORTANT MODIFICATION ADDED ###########: max_num_nodes=len(data.x) (wouldn't work without this)
+    ########################################################################
     components = extract_components(G)
     candidate = sorted(components, key=lambda x: len(x.info['orig_idx']), reverse=True)
     data.to(device)
