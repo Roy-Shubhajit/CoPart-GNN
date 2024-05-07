@@ -110,13 +110,15 @@ if __name__ == '__main__':
     parser.add_argument('--batch_size', type=int, default=128)
     parser.add_argument('--early_stopping', type=int, default=10)
     parser.add_argument('--extra_node', type=bool, default=False)
-    parser.add_argument('--lr', type=float, default=0.001)
+    parser.add_argument('--cluster_node', type=bool, default=True)
+    parser.add_argument('--lr', type=float, default=0.01)
     parser.add_argument('--weight_decay', type=float, default=0.0005)
     parser.add_argument('--normalize_features', type=bool, default=True)
     parser.add_argument('--coarsening_ratio', type=float, default=0.5)
     parser.add_argument('--coarsening_method', type=str, default='variation_neighborhoods') #'variation_neighborhoods', 'variation_edges', 'variation_cliques', 'heavy_edge', 'algebraic_JC', 'affinity_GS', 'kron'
     parser.add_argument('--output_dir', type=str, required=True)
     args = parser.parse_args()
+    print(args)
     path = "save/"+args.output_dir+"/"
     if not os.path.exists('save'):
         os.makedirs('save')
@@ -131,7 +133,8 @@ if __name__ == '__main__':
     for i in range(args.runs):
         #print(f"####################### Run {i+1}/{args.runs} #######################")
         run_writer = SummaryWriter(path+'/run_'+str(i+1))
-        coarsen_features, coarsen_train_labels, coarsen_train_mask, coarsen_val_labels, coarsen_val_mask, coarsen_edge, graphs = load_data(args.dataset, candidate, C_list, Gc_list, args.experiment, subgraph_list)
+        coarsen_features, coarsen_train_labels, coarsen_train_mask, coarsen_val_labels, coarsen_val_mask, coarsen_edge, graphs = load_data(args, args.dataset, candidate, C_list, Gc_list, args.experiment, subgraph_list)
+        torch.cuda.empty_cache()
         coarsen_features = coarsen_features.to(device)
         coarsen_train_labels = coarsen_train_labels.to(device)
         coarsen_train_mask = coarsen_train_mask.to(device)
@@ -211,14 +214,15 @@ if __name__ == '__main__':
     #check whether f"results/{args.dataset}.csv" is present or not, if not create and write a line
     if not os.path.exists(f"results/{args.dataset}.csv"):
         with open(f"results/{args.dataset}.csv", 'w') as f:
-            f.write('dataset,coarsening_method,coarsening_ratio,experiment,extra_nodes,hidden,runs,num_layers,batch_size,lr,ave_acc,ave_time,top_10_acc\n')
+            f.write('dataset,coarsening_method,coarsening_ratio,experiment,extra_nodes,cluster_node,hidden,runs,num_layers,batch_size,lr,ave_acc,ave_time,top_10_acc\n')
     #write the results to the csv file
     with open(f"results/{args.dataset}.csv", 'a') as f:
-        f.write(f"{args.dataset},{args.coarsening_method},{args.coarsening_ratio},{args.experiment},{args.extra_node},{args.hidden},{args.runs},{args.num_layers1},{args.batch_size},{args.lr},{np.mean(all_acc)} +/- {np.std(all_acc)},{np.mean(all_time)},{np.mean(top_acc)} +/- {np.std(top_acc)}\n")
+        f.write(f"{args.dataset},{args.coarsening_method},{args.coarsening_ratio},{args.experiment},{args.extra_node},{args.cluster_node},{args.hidden},{args.runs},{args.num_layers1},{args.batch_size},{args.lr},{np.mean(all_acc)} +/- {np.std(all_acc)},{np.mean(all_time)},{np.mean(top_acc)} +/- {np.std(top_acc)}\n")
     print("#####################################################################")
     print(f"dataset: {args.dataset}")
     print(f"experiment: {args.experiment}")
     print(f"extra_nodes: {args.extra_node}")
+    print(f"cluster_node: {args.cluster_node}")
     print(f"hidden: {args.hidden}")
     print(f"runs: {args.runs}")
     print(f"num_layers: {args.num_layers1}")
