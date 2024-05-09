@@ -136,6 +136,7 @@ def coarsening(args, coarsening_ratio, coarsening_method):
             meta_node_2_node = metanode_to_node_mapping_new(comp_node_2_meta_node, comp_node_2_node)
             for key, value in meta_node_2_node.items():
                 value = np.sort(value)
+                node_2_subgraph_node = {v.item(): i for i, v in enumerate(value)}
                 actual_ext = np.array([], dtype=np.compat.long)
                 num_nodes = len(value)
                 if args.cluster_node:
@@ -162,8 +163,8 @@ def coarsening(args, coarsening_ratio, coarsening_method):
                                     new_features = np.concatenate((new_features, new_feature.reshape(1,-1)), axis=0)
                                 num_nodes += 1
                             # print(meta_node_2_new_node[cluster] ,np.array([node, meta_node_2_new_node[cluster][0]], dtype=np.compat.long))
-                            e1 = np.array([node, meta_node_2_new_node[cluster][0]], dtype=np.compat.long)
-                            e2 = np.array([meta_node_2_new_node[cluster][0], node], dtype=np.compat.long)
+                            e1 = np.array([node_2_subgraph_node[node], meta_node_2_new_node[cluster][0]], dtype=np.compat.long)
+                            e2 = np.array([meta_node_2_new_node[cluster][0], node_2_subgraph_node[node]], dtype=np.compat.long)
                             if len(new_edges.shape) <= 1:
                                 new_edges = np.concatenate((new_edges, e1), axis=0)
                                 new_edges = new_edges.reshape(1, 2)
@@ -172,14 +173,16 @@ def coarsening(args, coarsening_ratio, coarsening_method):
                                 new_edges = np.concatenate((new_edges, e1.reshape(1,-1)), axis=0)
                                 new_edges = np.concatenate((new_edges, e2.reshape(1,-1)), axis=0)
                         
-                        if len(connected_clusters) > 1:
-                            for i in range(len(connected_clusters)-1):
-                                for j in range(i+1, len(connected_clusters)):
-                                    if adj[connected_clusters[i], connected_clusters[j]] > 0 or adj[connected_clusters[j], connected_clusters[i]] > 0:
-                                        e1 = np.array([meta_node_2_new_node[connected_clusters[i]], meta_node_2_new_node[connected_clusters[j]]], dtype=np.compat.long)
-                                        e2 = np.array([meta_node_2_new_node[connected_clusters[j]], meta_node_2_new_node[connected_clusters[i]]], dtype=np.compat.long)
-                                        new_edges = np.concatenate((new_edges, e1.reshape(1,-1)), axis=0)
-                                        new_edges = np.concatenate((new_edges, e2.reshape(1,-1)), axis=0)
+                    if len(meta_node_2_new_node.keys()) > 1:
+                        cluster_keys = list(meta_node_2_new_node.keys())
+                        for i in range(len(cluster_keys)-1):
+                            for j in range(i+1, len(cluster_keys)):
+                                if adj[cluster_keys[i], cluster_keys[j]] or adj[cluster_keys[j], cluster_keys[i]]:
+                                    e1 = np.array([meta_node_2_new_node[cluster_keys[i]][0], meta_node_2_new_node[cluster_keys[j]][0]], dtype=np.compat.long)
+                                    e2 = np.array([meta_node_2_new_node[cluster_keys[j]][0], meta_node_2_new_node[cluster_keys[i]][0]], dtype=np.compat.long)
+                                    new_edges = np.concatenate((new_edges, e1.reshape(1,-1)), axis=0)
+                                    new_edges = np.concatenate((new_edges, e2.reshape(1,-1)), axis=0)
+
                 elif args.extra_node:
                     extra_node = nodes_2_neighbours(dataset[0], value)
                     actual_ext = extra_node[~np.isin(extra_node, value)]
@@ -192,9 +195,9 @@ def coarsening(args, coarsening_ratio, coarsening_method):
                     mappiing[value[i].item()] = i
                 M = data.subgraph(value)
                 if args.cluster_node:
-                    M.x = torch.cat((M.x, torch.tensor(new_features)), dim=0)
+                    M.x = torch.cat((M.x, torch.tensor(new_features).float()), dim=0)
                     M.edge_index = torch.cat((M.edge_index.T, torch.tensor(new_edges, dtype=torch.long)), dim=0).T
-                    M.y = torch.cat((M.y, torch.zeros(len(new_features))))
+                    M.y = torch.cat((M.y, torch.zeros(len(new_features)).long()))
                     for new_node in actual_ext:
                         mappiing[new_node.item()] = new_node.item()
                 M.num_classes = num_classes
