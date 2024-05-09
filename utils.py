@@ -300,8 +300,6 @@ def load_data(args, dataset, candidate, C_list, Gc_list, exp, subgraph_list):
                 F.test_mask[new_node] = False
         
         new_graphs.append(F)
-    
-    torch.cuda.empty_cache()
 
     while number < len(candidate):
         H = candidate[number]

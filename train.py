@@ -31,6 +31,10 @@ class new_loss_fn(torch.nn.Module):
 def train_M1(model, x, edge_index, mask, y, loss_fn, optimizer):
     model.train()
     optimizer.zero_grad()
+    x = x.to(device)
+    y = y.to(device)
+    edge_index = edge_index.to(device)
+    mask = mask.to(device)
     out = model(x, edge_index)
     loss = loss_fn(out[mask], y[mask])
     loss.backward()
@@ -39,6 +43,10 @@ def train_M1(model, x, edge_index, mask, y, loss_fn, optimizer):
 
 def infer_M1(model, x, edge_index, mask, y, loss_fn):
     model.eval()
+    x = x.to(device)
+    y = y.to(device)
+    edge_index = edge_index.to(device)
+    mask = mask.to(device)
     out = model(x, edge_index)
     loss = loss_fn(out[mask], y[mask])
     return loss.item()
@@ -52,8 +60,9 @@ def train_M2(model, graph_data, loss_fn, optimizer):
             x = graph.x.to(device)
             y = graph.y.to(device)
             edge_index = graph.edge_index.to(device)
+            train_mask = graph.train_mask.to(device)
             out = model(x, edge_index)
-            loss = loss_fn(out[graph.train_mask], y[graph.train_mask])
+            loss = loss_fn(out[train_mask], y[train_mask])
             loss.backward()
             optimizer.step()
             total_loss += loss.item()
@@ -75,21 +84,22 @@ def infer_M2(model, graph_data, loss_fn, infer_type):
             if True in graph.test_mask:
                 start_time = time.time()
                 out = model(x, edge_index)
-                
+                test_mask = graph.test_mask.to(device)
                 total_time += time.time() - start_time
-                loss = loss_fn(out[graph.test_mask], y[graph.test_mask])
+                loss = loss_fn(out[test_mask], y[test_mask])
                 total_loss += loss.item()
-                all_out = torch.cat((all_out, torch.max(out[graph.test_mask], dim=1)[1].to(device)), dim=0)
-                all_label = torch.cat((all_label, y[graph.test_mask]), dim=0)
+                all_out = torch.cat((all_out, torch.max(out[test_mask], dim=1)[1].to(device)), dim=0)
+                all_label = torch.cat((all_label, y[test_mask]), dim=0)
             else:
                 continue
         else:
             if True in graph.val_mask:
                 out = model(x, edge_index)
-                loss = loss_fn(out[graph.val_mask], y[graph.val_mask])
+                val_mask = graph.val_mask.to(device)
+                loss = loss_fn(out[val_mask], y[val_mask])
                 total_loss += loss.item()
-                all_out = torch.cat((all_out, torch.max(out[graph.val_mask], dim=1)[1].to(device)), dim=0)
-                all_label = torch.cat((all_label, y[graph.val_mask]), dim=0)
+                all_out = torch.cat((all_out, torch.max(out[val_mask], dim=1)[1].to(device)), dim=0)
+                all_label = torch.cat((all_label, y[val_mask]), dim=0)
             else:
                 continue
     
@@ -134,14 +144,6 @@ if __name__ == '__main__':
         #print(f"####################### Run {i+1}/{args.runs} #######################")
         run_writer = SummaryWriter(path+'/run_'+str(i+1))
         coarsen_features, coarsen_train_labels, coarsen_train_mask, coarsen_val_labels, coarsen_val_mask, coarsen_edge, graphs = load_data(args, args.dataset, candidate, C_list, Gc_list, args.experiment, subgraph_list)
-        torch.cuda.empty_cache()
-        coarsen_features = coarsen_features.to(device)
-        coarsen_train_labels = coarsen_train_labels.to(device)
-        coarsen_train_mask = coarsen_train_mask.to(device)
-        coarsen_val_labels = coarsen_val_labels.to(device)
-        coarsen_val_mask = coarsen_val_mask.to(device)
-        coarsen_edge = coarsen_edge.to(device)
-
         if args.normalize_features:
             coarsen_features = F.normalize(coarsen_features, p=1)
         
