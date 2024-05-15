@@ -160,7 +160,7 @@ if __name__ == '__main__':
             coarsen_features = F.normalize(coarsen_features, p=1)
         
         #graph_data = DataLoader(graphs, batch_size=args.batch_size, shuffle=True)  
-        graph_data = DataLoader(graphs, batch_size=len(graphs), shuffle=True) 
+        graph_data = DataLoader(graphs, batch_size=len(graphs), shuffle=False) 
 
         model1 = Net1(args).to(device)
         model1.reset_parameters()

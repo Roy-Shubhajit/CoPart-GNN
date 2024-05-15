@@ -283,8 +283,8 @@ def coarsening(args, coarsening_ratio, coarsening_method):
                 new_subgraph_list.append(M_t)
                 subgraph_list.append(M)
         else:
-            comp_node_2_meta_node = subgraph_mapping([{0: 0}])
-            meta_node_2_node = metanode_to_node_mapping_new(comp_node_2_meta_node, node_2_comp_node)
+            comp_node_2_meta_node = {0: 0}
+            meta_node_2_node = metanode_to_node_mapping_new(comp_node_2_meta_node, comp_node_2_node)
             for key, value in meta_node_2_node.items():
                 value = torch.LongTensor(value)
                 value, _ = torch.sort(value)
