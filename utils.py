@@ -16,56 +16,64 @@ def create_super_graph(dataset, component_2_subgraphs, CLIST, GcLIST):
     # Not considering masking variables here
     sub_super_graph_list = []
     for component in component_2_subgraphs.keys():
-        sub_super_graph = DataLoader(component_2_subgraphs[component], batch_size=len(component_2_subgraphs[component]), shuffle=False)
-        for graph in sub_super_graph:
-            G_new = Data(x = graph.x, y = graph.y, edge_index = graph.edge_index, ptr = graph.ptr)
-            orig_idx_2_sub_super_graph = dict() # USING DICTIONARY FOR ORIGINAL NODE TO SUPER GRAPH NODE MAPPING
-            for idx, node in enumerate(graph.orig_idx):
-                orig_idx_2_sub_super_graph[node.item()] = idx
-            cluster_node_2_sub_super_graph = (G_new.x.shape[0]) + np.arange(G_new.ptr.shape[0]-1) # CLUSTER NODES GIVEN NUMBERS AFTER NORMAL NODE NUMBERS IN SUPER GRAPH
-            new_edges = np.array([], dtype=np.compat.long)
-            actual_ext = set()
-            for node in range(G_new.x.shape[0]):
-                N_node_in_orig = neighbour(dataset[0], graph.orig_idx[node].item())
-                N_node_in_subgraph = neighbour(G_new, node)
-                Nt_node = []
-                for n_node in N_node_in_orig:
-                    if orig_idx_2_sub_super_graph[n_node] not in N_node_in_subgraph:
-                        Nt_node.append(orig_idx_2_sub_super_graph[n_node])
-                Nt_node = np.array(Nt_node)
-                cluster_nodes = []
-                if Nt_node.shape[0] >= 1:
-                    for nt_node in Nt_node:
-                        cluster_nodes.append(np.argwhere(nt_node >= G_new.ptr.numpy())[-1][0])
-                        actual_ext.add(cluster_nodes[-1])
-                        e1 = np.array([node, cluster_node_2_sub_super_graph[cluster_nodes[-1]]], dtype=np.compat.long)
-                        e2 = np.array([cluster_node_2_sub_super_graph[cluster_nodes[-1]], node], dtype=np.compat.long)
-                        if len(new_edges.shape) <= 1:
-                            new_edges = np.concatenate((new_edges, e1), axis=0)
-                            new_edges = new_edges.reshape(1, 2)
-                            new_edges = np.concatenate((new_edges, e2.reshape(1,-1)), axis=0)
-                        else:
+        if sum(g.x.shape[0] for g in component_2_subgraphs[component]) > 1:
+            sub_super_graph = DataLoader(component_2_subgraphs[component], batch_size=len(component_2_subgraphs[component]), shuffle=False)
+            for graph in sub_super_graph:
+                G_new = Data(x = graph.x, y = graph.y, edge_index = graph.edge_index, ptr = graph.ptr)
+                orig_idx_2_sub_super_graph = dict() # USING DICTIONARY FOR ORIGINAL NODE TO SUPER GRAPH NODE MAPPING
+                for idx, node in enumerate(graph.orig_idx):
+                    orig_idx_2_sub_super_graph[node.item()] = idx
+                cluster_node_2_sub_super_graph = (G_new.x.shape[0]) + np.arange(G_new.ptr.shape[0]-1) # CLUSTER NODES GIVEN NUMBERS AFTER NORMAL NODE NUMBERS IN SUPER GRAPH
+                new_edges = np.array([], dtype=np.compat.long)
+                actual_ext = set()
+                for node in range(G_new.x.shape[0]):
+                    N_node_in_orig = neighbour(dataset[0], graph.orig_idx[node].item())
+                    N_node_in_subgraph = neighbour(G_new, node)
+                    Nt_node = []
+                    for n_node in N_node_in_orig:
+                        if orig_idx_2_sub_super_graph[n_node] not in N_node_in_subgraph:
+                            Nt_node.append(orig_idx_2_sub_super_graph[n_node])
+                    Nt_node = np.array(Nt_node)
+                    cluster_nodes = []
+                    if Nt_node.shape[0] >= 1:
+                        for nt_node in Nt_node:
+                            cluster_nodes.append(np.argwhere(nt_node >= G_new.ptr.numpy())[-1][0])
+                            actual_ext.add(cluster_nodes[-1])
+                            e1 = np.array([node, cluster_node_2_sub_super_graph[cluster_nodes[-1]]], dtype=np.compat.long)
+                            e2 = np.array([cluster_node_2_sub_super_graph[cluster_nodes[-1]], node], dtype=np.compat.long)
+                            if len(new_edges.shape) <= 1:
+                                new_edges = np.concatenate((new_edges, e1), axis=0)
+                                new_edges = new_edges.reshape(1, 2)
+                                new_edges = np.concatenate((new_edges, e2.reshape(1,-1)), axis=0)
+                            else:
+                                new_edges = np.concatenate((new_edges, e1.reshape(1,-1)), axis=0)
+                                new_edges = np.concatenate((new_edges, e2.reshape(1,-1)), axis=0)
+
+                # ADDED ALL CROSS EDGES BETWEEN SELECTED CLUSTERS AS GIVEN IN Gc
+                actual_ext = list(actual_ext)
+                G_new.actual_ext = torch.tensor(np.array(actual_ext) + (G_new.x.shape[0]), dtype = float)
+                coar_adj_mat = GcLIST[component].A.toarray()
+                for i in range(len(G_new.actual_ext)-1):
+                    for j in range(i+1, len(G_new.actual_ext)):
+                        if coar_adj_mat[actual_ext[i],actual_ext[j]] or coar_adj_mat[actual_ext[j],actual_ext[i]]:
+                            e1 = np.array([G_new.actual_ext[i].item(), G_new.actual_ext[j].item()], dtype=np.compat.long)
+                            e2 = np.array([G_new.actual_ext[j].item(), G_new.actual_ext[i].item()], dtype=np.compat.long)
                             new_edges = np.concatenate((new_edges, e1.reshape(1,-1)), axis=0)
                             new_edges = np.concatenate((new_edges, e2.reshape(1,-1)), axis=0)
 
-            # ADDED ALL CROSS EDGES BETWEEN SELECTED CLUSTERS AS GIVEN IN Gc
-            actual_ext = list(actual_ext)
-            G_new.actual_ext = torch.tensor(np.array(actual_ext) + (G_new.x.shape[0]), dtype = float)
-            coar_adj_mat = GcLIST[component].A.toarray()
-            for i in range(len(G_new.actual_ext)-1):
-                for j in range(i+1, len(G_new.actual_ext)):
-                    if coar_adj_mat[actual_ext[i],actual_ext[j]] or coar_adj_mat[actual_ext[j],actual_ext[i]]:
-                        e1 = np.array([G_new.actual_ext[i].item(), G_new.actual_ext[j].item()], dtype=np.compat.long)
-                        e2 = np.array([G_new.actual_ext[j].item(), G_new.actual_ext[i].item()], dtype=np.compat.long)
-                        new_edges = np.concatenate((new_edges, e1.reshape(1,-1)), axis=0)
-                        new_edges = np.concatenate((new_edges, e2.reshape(1,-1)), axis=0)
-
-            cluster_features = CLIST[component].dot(G_new.x)
-            G_new.x = torch.cat((G_new.x, torch.tensor(cluster_features).float()), dim = 0)
-            G_new.y = torch.cat((G_new.y, torch.zeros(len(cluster_features)).long()), dim = 0)
-            G_new.edge_index = torch.cat((G_new.edge_index.T, torch.tensor(new_edges, dtype=torch.long)), dim=0).T
-            G_new.num_classes = graph.num_classes
-            G_new.orig_idx_2_sub_super_graph = orig_idx_2_sub_super_graph
+                cluster_features = CLIST[component].dot(G_new.x)
+                G_new.x = torch.cat((G_new.x, torch.tensor(cluster_features).float()), dim = 0)
+                G_new.y = torch.cat((G_new.y, torch.zeros(len(cluster_features)).long()), dim = 0)
+                G_new.edge_index = torch.cat((G_new.edge_index.T, torch.tensor(new_edges, dtype=torch.long)), dim=0).T
+                G_new.num_classes = graph.num_classes[0]
+                G_new.orig_idx_2_sub_super_graph = orig_idx_2_sub_super_graph
+        else:
+            actual_ext = []
+            for idx, node in enumerate(component_2_subgraphs[component][0].orig_idx):
+                    orig_idx_2_sub_super_graph[node.item()] = idx
+            G_new = Data(x=component_2_subgraphs[component][0].x, y=component_2_subgraphs[component][0].y, 
+                         edge_index=component_2_subgraphs[component][0].edge_index, num_classes=component_2_subgraphs[component][0].num_classes[0], 
+                         actual_ext=actual_ext, orig_idx_2_sub_super_graph=orig_idx_2_sub_super_graph)
         sub_super_graph_list.append(G_new)
 
     return sub_super_graph_list
@@ -264,7 +272,7 @@ def coarsening(args, coarsening_ratio, coarsening_method):
                 M.num_classes = num_classes
                 M.actual_ext = actual_ext
                 M.orig_idx = value
-                new_subgraph_list.append(M)
+                M_t = Data(x = M.x, y = M.y, edge_index = M.edge_index, num_classes = M.num_classes, orig_idx = M.orig_idx)
                 if args.cluster_node:
                     M.x = torch.cat((M.x, torch.tensor(new_features).float()), dim=0)
                     M.edge_index = torch.cat((M.edge_index.T, torch.tensor(new_edges, dtype=torch.long)), dim=0).T
@@ -272,6 +280,7 @@ def coarsening(args, coarsening_ratio, coarsening_method):
                     for new_node in actual_ext:
                         mappiing[new_node.item()] = new_node.item()
                 M.map_dict = mappiing
+                new_subgraph_list.append(M_t)
                 subgraph_list.append(M)
         else:
             comp_node_2_meta_node = subgraph_mapping([{0: 0}])
@@ -284,19 +293,21 @@ def coarsening(args, coarsening_ratio, coarsening_method):
                 M.num_classes = num_classes
                 M.actual_ext = actual_ext
                 M.orig_idx = value
-                new_subgraph_list.append(M)
                 mappiing = {}
                 for i in range(len(value)):
                     mappiing[value[i].item()] = i
                 M.map_dict = mappiing
                 subgraph_list.append(M)
+                M_t = Data(x = M.x, y = M.y, edge_index = M.edge_index, num_classes = M.num_classes, orig_idx = M.orig_idx)
+                new_subgraph_list.append(M_t)
         component_2_subgraphs[number] = new_subgraph_list
         number += 1
 
     #print("Subgraphs created, number of subgraphs: ", len(subgraph_list))
 
     if args.super_graph:
-        return data.x.shape[1], num_classes, candidate, C_list, Gc_list, (dataset, component_2_subgraphs, CLIST, GcLIST)
+        component_2_supergraph = create_super_graph(dataset, component_2_subgraphs, CLIST, GcLIST)
+        return data.x.shape[1], num_classes, candidate, C_list, Gc_list, component_2_supergraph
     else:
         return data.x.shape[1], num_classes, candidate, C_list, Gc_list, subgraph_list
 
