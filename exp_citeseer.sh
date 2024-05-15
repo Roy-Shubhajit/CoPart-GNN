@@ -1,4 +1,4 @@
-#run train.py for cora  and coarsening ratios
+#run train.py for different datasets and coarsening ratios
 underscore="_"
 exp_fixed="fixed"
 exp_few="few"
@@ -6,7 +6,7 @@ exp_random="random"
 extra="extra"
 cluster="cluster"
 transfer="transfer"
-dataset="cora"
+dataset="citeseer"
 for coarsening_method in variation_neighborhoods algebraic_JC
 do
     for coarsening_ratio in 0.0 0.1 0.3 0.5 0.7 1.0
@@ -18,4 +18,5 @@ do
         python train.py --dataset $dataset --experiment few --coarsening_ratio $coarsening_ratio --coarsening_method $coarsening_method --cluster_node True --output_dir $output_dir
     done
 done
+
 

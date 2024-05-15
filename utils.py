@@ -5,10 +5,70 @@ from graph_coarsening.coarsening_utils import *
 from torch_geometric.datasets import Coauthor
 from torch_geometric.datasets import CitationFull
 from torch_geometric.data import Data
+from torch_geometric.loader import DataLoader
 from torch_geometric.utils import subgraph
 from tqdm import tqdm
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+def create_super_graph(dataset, component_2_subgraphs, CLIST, GcLIST):
+    # super_graph is the final data object which has combined graphs of all components
+    # Not considering masking variables here
+    sub_super_graph_list = []
+    for component in component_2_subgraphs.keys():
+        sub_super_graph = DataLoader(component_2_subgraphs[component], batch_size=len(component_2_subgraphs[component]), shuffle=False)
+        for graph in sub_super_graph:
+            G_new = Data(x = graph.x, y = graph.y, edge_index = graph.edge_index, ptr = graph.ptr)
+            orig_idx_2_sub_super_graph = dict() # USING DICTIONARY FOR ORIGINAL NODE TO SUPER GRAPH NODE MAPPING
+            for idx, node in enumerate(graph.orig_idx):
+                orig_idx_2_sub_super_graph[node.item()] = idx
+            cluster_node_2_sub_super_graph = (G_new.x.shape[0]) + np.arange(G_new.ptr.shape[0]-1) # CLUSTER NODES GIVEN NUMBERS AFTER NORMAL NODE NUMBERS IN SUPER GRAPH
+            new_edges = np.array([], dtype=np.compat.long)
+            actual_ext = set()
+            for node in range(G_new.x.shape[0]):
+                N_node_in_orig = neighbour(dataset[0], graph.orig_idx[node].item())
+                N_node_in_subgraph = neighbour(G_new, node)
+                Nt_node = []
+                for n_node in N_node_in_orig:
+                    if orig_idx_2_sub_super_graph[n_node] not in N_node_in_subgraph:
+                        Nt_node.append(orig_idx_2_sub_super_graph[n_node])
+                Nt_node = np.array(Nt_node)
+                cluster_nodes = []
+                if Nt_node.shape[0] >= 1:
+                    for nt_node in Nt_node:
+                        cluster_nodes.append(np.argwhere(nt_node >= G_new.ptr.numpy())[-1][0])
+                        actual_ext.add(cluster_nodes[-1])
+                        e1 = np.array([node, cluster_node_2_sub_super_graph[cluster_nodes[-1]]], dtype=np.compat.long)
+                        e2 = np.array([cluster_node_2_sub_super_graph[cluster_nodes[-1]], node], dtype=np.compat.long)
+                        if len(new_edges.shape) <= 1:
+                            new_edges = np.concatenate((new_edges, e1), axis=0)
+                            new_edges = new_edges.reshape(1, 2)
+                            new_edges = np.concatenate((new_edges, e2.reshape(1,-1)), axis=0)
+                        else:
+                            new_edges = np.concatenate((new_edges, e1.reshape(1,-1)), axis=0)
+                            new_edges = np.concatenate((new_edges, e2.reshape(1,-1)), axis=0)
+
+            # ADDED ALL CROSS EDGES BETWEEN SELECTED CLUSTERS AS GIVEN IN Gc
+            actual_ext = list(actual_ext)
+            G_new.actual_ext = torch.tensor(np.array(actual_ext) + (G_new.x.shape[0]), dtype = float)
+            coar_adj_mat = GcLIST[component].A.toarray()
+            for i in range(len(G_new.actual_ext)-1):
+                for j in range(i+1, len(G_new.actual_ext)):
+                    if coar_adj_mat[actual_ext[i],actual_ext[j]] or coar_adj_mat[actual_ext[j],actual_ext[i]]:
+                        e1 = np.array([G_new.actual_ext[i].item(), G_new.actual_ext[j].item()], dtype=np.compat.long)
+                        e2 = np.array([G_new.actual_ext[j].item(), G_new.actual_ext[i].item()], dtype=np.compat.long)
+                        new_edges = np.concatenate((new_edges, e1.reshape(1,-1)), axis=0)
+                        new_edges = np.concatenate((new_edges, e2.reshape(1,-1)), axis=0)
+
+            cluster_features = CLIST[component].dot(G_new.x)
+            G_new.x = torch.cat((G_new.x, torch.tensor(cluster_features).float()), dim = 0)
+            G_new.y = torch.cat((G_new.y, torch.zeros(len(cluster_features)).long()), dim = 0)
+            G_new.edge_index = torch.cat((G_new.edge_index.T, torch.tensor(new_edges, dtype=torch.long)), dim=0).T
+            G_new.num_classes = graph.num_classes
+            G_new.orig_idx_2_sub_super_graph = orig_idx_2_sub_super_graph
+        sub_super_graph_list.append(G_new)
+
+    return sub_super_graph_list
 
 def create_distribution_tensor(input_tensor, class_count):
     if input_tensor.dtype != torch.int64:
@@ -120,15 +180,21 @@ def coarsening(args, coarsening_ratio, coarsening_method):
     number = 0
     C_list=[]
     Gc_list=[]
+    CLIST = [] # NEWLY ADDED (WORKS FOR CORA)
+    GcLIST = [] # NEWLY ADDED (WORKS FOR CORA)
     subgraph_list=[]
+    component_2_subgraphs = {}
     while number < len(candidate):
         H = candidate[number]
+        new_subgraph_list = []
         H_feature = data.x[H.info['orig_idx']]
         comp_node_2_node, node_2_comp_node = orig_to_new_map(H.info['orig_idx'])
         if len(H.info['orig_idx']) > 1:
             C, Gc, mapping_dict_list = coarsen(H, r=coarsening_ratio, method=coarsening_method)
             adj = Gc.A
             C_dot_H_feature = C.dot(H_feature)
+            CLIST.append(C)
+            GcLIST.append(Gc)
             if len(H.info['orig_idx']) > 10:
                 C_list.append(C)
                 Gc_list.append(Gc)
@@ -188,21 +254,24 @@ def coarsening(args, coarsening_ratio, coarsening_method):
                     actual_ext = extra_node[~np.isin(extra_node, value)]
                     value = np.concatenate((value, extra_node), 0)
                     value = np.unique(value)
+                
                 value = np.sort(value)
                 value = torch.tensor(value)
                 mappiing = {}
                 for i in range(len(value)):
                     mappiing[value[i].item()] = i
                 M = data.subgraph(value)
+                M.num_classes = num_classes
+                M.actual_ext = actual_ext
+                M.orig_idx = value
+                new_subgraph_list.append(M)
                 if args.cluster_node:
                     M.x = torch.cat((M.x, torch.tensor(new_features).float()), dim=0)
                     M.edge_index = torch.cat((M.edge_index.T, torch.tensor(new_edges, dtype=torch.long)), dim=0).T
                     M.y = torch.cat((M.y, torch.zeros(len(new_features)).long()))
                     for new_node in actual_ext:
                         mappiing[new_node.item()] = new_node.item()
-                M.num_classes = num_classes
                 M.map_dict = mappiing
-                M.actual_ext = actual_ext
                 subgraph_list.append(M)
         else:
             comp_node_2_meta_node = subgraph_mapping([{0: 0}])
@@ -211,17 +280,25 @@ def coarsening(args, coarsening_ratio, coarsening_method):
                 value = torch.LongTensor(value)
                 value, _ = torch.sort(value)
                 actual_ext = torch.LongTensor([])
+                M = data.subgraph(value)
+                M.num_classes = num_classes
+                M.actual_ext = actual_ext
+                M.orig_idx = value
+                new_subgraph_list.append(M)
                 mappiing = {}
                 for i in range(len(value)):
                     mappiing[value[i].item()] = i
-                M = data.subgraph(value)
-                M.num_classes = num_classes
                 M.map_dict = mappiing
-                M.actual_ext = actual_ext
                 subgraph_list.append(M)
+        component_2_subgraphs[number] = new_subgraph_list
         number += 1
+
     #print("Subgraphs created, number of subgraphs: ", len(subgraph_list))
-    return data.x.shape[1], num_classes, candidate, C_list, Gc_list, subgraph_list
+
+    if args.super_graph:
+        return data.x.shape[1], num_classes, candidate, C_list, Gc_list, (dataset, component_2_subgraphs, CLIST, GcLIST)
+    else:
+        return data.x.shape[1], num_classes, candidate, C_list, Gc_list, subgraph_list
 
 def index_to_mask(index, size):
     mask = torch.zeros(size, dtype=torch.bool, device=index.device)
@@ -278,28 +355,47 @@ def load_data(args, dataset, candidate, C_list, Gc_list, exp, subgraph_list):
 
     new_graphs = []
 
-    for graph in subgraph_list:
-        F = Data(x=graph.x, edge_index=graph.edge_index, y=graph.y, num_classes=graph.num_classes)
-        F.train_mask = torch.zeros(graph.x.shape[0], dtype=torch.bool)
-        F.val_mask = torch.zeros(graph.x.shape[0], dtype=torch.bool)
-        F.test_mask = torch.zeros(graph.x.shape[0], dtype=torch.bool)
-        for node, new_node in graph.map_dict.items():
-            if train_mask[node]:
-                F.train_mask[new_node] = True
-            if val_mask[node]:
-                F.val_mask[new_node] = True
-            if test_mask[node]:
-                F.test_mask[new_node] = True
-            if args.extra_node and node in graph.actual_ext:
-                F.train_mask[new_node] = False
-                F.val_mask[new_node] = False
-                F.test_mask[new_node] = False
-            if args.cluster_node and new_node in graph.actual_ext:
-                F.train_mask[new_node] = False
-                F.val_mask[new_node] = False
-                F.test_mask[new_node] = False
-        
-        new_graphs.append(F)
+    if args.super_graph:
+        for graph in subgraph_list:
+            F = Data(x=graph.x, edge_index=graph.edge_index, y=graph.y, num_classes=graph.num_classes)
+            F.train_mask = torch.zeros(graph.x.shape[0], dtype=torch.bool)
+            F.val_mask = torch.zeros(graph.x.shape[0], dtype=torch.bool)
+            F.test_mask = torch.zeros(graph.x.shape[0], dtype=torch.bool)
+            for node, new_node in graph.orig_idx_2_sub_super_graph.items():
+                if train_mask[node]:
+                    F.train_mask[new_node] = True
+                if val_mask[node]:
+                    F.val_mask[new_node] = True
+                if test_mask[node]:
+                    F.test_mask[new_node] = True
+                if new_node in graph.actual_ext:
+                    F.train_mask[new_node] = False
+                    F.val_mask[new_node] = False
+                    F.test_mask[new_node] = False
+            new_graphs.append(F)
+
+    else:
+        for graph in subgraph_list:
+            F = Data(x=graph.x, edge_index=graph.edge_index, y=graph.y, num_classes=graph.num_classes)
+            F.train_mask = torch.zeros(graph.x.shape[0], dtype=torch.bool)
+            F.val_mask = torch.zeros(graph.x.shape[0], dtype=torch.bool)
+            F.test_mask = torch.zeros(graph.x.shape[0], dtype=torch.bool)
+            for node, new_node in graph.map_dict.items():
+                if train_mask[node]:
+                    F.train_mask[new_node] = True
+                if val_mask[node]:
+                    F.val_mask[new_node] = True
+                if test_mask[node]:
+                    F.test_mask[new_node] = True
+                if args.extra_node and node in graph.actual_ext:
+                    F.train_mask[new_node] = False
+                    F.val_mask[new_node] = False
+                    F.test_mask[new_node] = False
+                if args.cluster_node and new_node in graph.actual_ext:
+                    F.train_mask[new_node] = False
+                    F.val_mask[new_node] = False
+                    F.test_mask[new_node] = False
+            new_graphs.append(F)
 
     while number < len(candidate):
         H = candidate[number]

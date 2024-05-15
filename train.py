@@ -121,6 +121,7 @@ if __name__ == '__main__':
     parser.add_argument('--early_stopping', type=int, default=10)
     parser.add_argument('--extra_node', type=bool, default=False)
     parser.add_argument('--cluster_node', type=bool, default=False)
+    parser.add_argument('--super_graph', type=bool, default=False)
     parser.add_argument('--lr', type=float, default=0.01)
     parser.add_argument('--weight_decay', type=float, default=0.0005)
     parser.add_argument('--normalize_features', type=bool, default=True)
@@ -128,6 +129,17 @@ if __name__ == '__main__':
     parser.add_argument('--coarsening_method', type=str, default='variation_neighborhoods') #'variation_neighborhoods', 'variation_edges', 'variation_cliques', 'heavy_edge', 'algebraic_JC', 'affinity_GS', 'kron'
     parser.add_argument('--output_dir', type=str, required=True)
     args = parser.parse_args()
+    
+    if args.super_graph:
+        args.cluster_node = False
+        args.extra_node = False
+    elif args.cluster_node:
+        args.extra_node = False
+        args.super_graph = False
+    elif args.extra_node:
+        args.cluster_node = False
+        args.super_graph = False
+
     print(args)
     path = "save/"+args.output_dir+"/"
     if not os.path.exists('save'):
