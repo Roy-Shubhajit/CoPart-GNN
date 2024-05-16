@@ -1,5 +1,5 @@
 #run graph_data_analysis.py for all datasets and coarsening ratios
-for dataset in citeseer pubmed dblp Physics
+for dataset in pubmed dblp Physics
 do
     for coarsening_method in variation_neighborhoods
     do
