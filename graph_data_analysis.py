@@ -8,6 +8,7 @@ from utils import load_data, coarsening, create_distribution_tensor
 import os
 from tqdm import tqdm
 import time
+import sys
 from torch_geometric.loader import DataLoader
 
 parser = argparse.ArgumentParser()
@@ -48,13 +49,32 @@ args.num_features, args.num_classes, candidate, C_list, Gc_list, subgraph_list =
 num_extra_nodes = []
 num_orig_nodes = []
 num_subgraph_nodes = []
+x = 0
+y = 0
+edge_index = 0
+train_mask = 0
+val_mask = 0
+test_mask = 0
+
 for subgraph in subgraph_list:
     num_extra_nodes.append(len(subgraph.actual_ext))
     num_orig_nodes.append(subgraph.x.shape[0] - len(subgraph.actual_ext))
     num_subgraph_nodes.append(subgraph.x.shape[0])
-                          
+    x += sys.getsizeof(subgraph.x[0][0])*subgraph.x.shape[0]*subgraph.x.shape[1]
+    y += sys.getsizeof(subgraph.y[0])*subgraph.y.shape[0]
+    print(subgraph.edge_index)
+    if subgraph.edge_index.shape != (2,0):
+        edge_index += sys.getsizeof(subgraph.edge_index[0][0])*subgraph.edge_index.shape[0]*subgraph.edge_index.shape[1]
+    if args.dataset not in ["dblp","Physics"]:
+        train_mask += sys.getsizeof(subgraph.train_mask[0])*subgraph.train_mask.shape[0]
+        val_mask += sys.getsizeof(subgraph.val_mask[0])*subgraph.val_mask.shape[0]
+        test_mask += sys.getsizeof(subgraph.test_mask[0])*subgraph.test_mask.shape[0]
+
+total = x + y + edge_index + train_mask + val_mask + test_mask
+# print(subgraph, x, y, edge_index, train_mask, val_mask, test_mask)
+
 with open("results.txt", 'a') as f:
-    f.write(f"{args.dataset}, {args.coarsening_ratio}, {len(num_extra_nodes)}, {np.sum(num_extra_nodes)}, {np.mean(num_extra_nodes)}, {np.max(num_extra_nodes)}, {np.sum(num_orig_nodes)}, {np.sum(num_orig_nodes)**2}, {np.linalg.norm(num_subgraph_nodes)**2}\n")
+    f.write(f"{args.dataset}, {args.coarsening_ratio}, {len(num_extra_nodes)}, {np.sum(num_extra_nodes)}, {np.mean(num_extra_nodes)}, {np.max(num_extra_nodes)}, {np.sum(num_orig_nodes)}, {np.sum(num_orig_nodes)**2}, {np.linalg.norm(num_subgraph_nodes)**2}, {x}, {y}, {edge_index}, {train_mask}, {val_mask}, {test_mask}, {total}\n")
 f.close()
 # print(f"##### Coarsening Ratio {args.coarsening_ratio} #####")
 # print(f"Tot Num Extra Nodes: {np.sum(num_extra_nodes)}")
