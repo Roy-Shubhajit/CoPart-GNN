@@ -53,6 +53,7 @@ def infer_M1(model, x, edge_index, mask, y, loss_fn):
 
 def train_M2(model, graph_data, loss_fn, optimizer):
     total_loss = 0
+    n = 0
     for graph in graph_data:
         if True in graph.train_mask:
             model.train()
@@ -68,7 +69,8 @@ def train_M2(model, graph_data, loss_fn, optimizer):
             total_loss += loss.item()
         else:
             continue
-    return total_loss / len(graphs)
+        n = n + 1
+    return total_loss / n
 
 def infer_M2(model, graph_data, loss_fn, infer_type):
     total_loss = 0
@@ -105,7 +107,18 @@ def infer_M2(model, graph_data, loss_fn, infer_type):
     
     return total_loss / len(graphs), int(all_out.eq(all_label).sum().item()) / int(all_label.shape[0]), total_time
         
+def arg_correction(args):
+    if args.super_graph:
+        args.cluster_node = False
+        args.extra_node = False
+    elif args.cluster_node:
+        args.extra_node = False
+        args.super_graph = False
+    elif args.extra_node:
+        args.cluster_node = False
+        args.super_graph = False
 
+    return args
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -130,16 +143,8 @@ if __name__ == '__main__':
     parser.add_argument('--output_dir', type=str, required=True)
     args = parser.parse_args()
     
-    if args.super_graph:
-        args.cluster_node = False
-        args.extra_node = False
-    elif args.cluster_node:
-        args.extra_node = False
-        args.super_graph = False
-    elif args.extra_node:
-        args.cluster_node = False
-        args.super_graph = False
-
+    args = arg_correction(args)
+    
     print(args)
     path = "save/"+args.output_dir+"/"
     if not os.path.exists('save'):
