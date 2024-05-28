@@ -4,9 +4,9 @@ exp_few="few"
 extra="extra"
 dataset="cora"
 coarsening_method=variation_neighborhoods
-for coarsening_ratio in 0.1 0.3 0.5 0.7 1.0
+for coarsening_ratio in 0.7 1.0
 do
-    for exp_setup in Gc_train_2_Gs_train Gc_train_2_Gs_infer Gs_train_2_Gs_infer
+    for exp_setup in Gs_train_2_Gs_infer
     do 
         c=$(echo $coarsening_ratio | sed 's/\.//g')
         output_dir=$dataset$underscore$exp_fixed$underscore$exp_setup$underscore$c$underscore$coarsening_method$underscore$extra
