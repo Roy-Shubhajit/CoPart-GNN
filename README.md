@@ -1,8 +1,14 @@
 # CoPart-GNN
-## Accuracies for `extra_node` varying `exp_setup`
-![avg_acc](results/ave_acc.png)
-![top_10_acc](results/top_10_acc.png)
+
+Dataset used for Graph Level Tasks : `ENZYMES (torch_geometric.datasets.TUDataset)`
+
+## Description of Workflow
+![Image](description.png)
+
+---
 
 ## Important files added/modified
-./results/cora.csv<br>
-./save/
+./test.py<br>
+./utils.py<br>
+./temp.ipynb
+
