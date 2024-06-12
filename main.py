@@ -53,7 +53,7 @@ def train_Gs(model, graph_data, loss_fn, optimizer):
             total_loss += loss.item()
         else:
             continue
-        
+        n = n + 1 # ADDED. ZeroDivisionError was being raised
     return total_loss / n
 
 def infer_Gs(model, graph_data, loss_fn, infer_type):
@@ -173,8 +173,8 @@ if __name__ == "__main__":
                     torch.save(model.state_dict(), path+'/model.pt') 
 
             #Train and val on Gs
-            model = model.load_state_dict(torch.load(path+'/model.pt'))      
-            for epoch in range(args.epochs2):
+            model.load_state_dict(torch.load(path+'/model.pt'))# changed from model = model.load_state_dict(torch.load(path+'/model.pt')) -> model.load_state_dict(torch.load(path+'/model.pt'))
+            for epoch in tqdm(range(args.epochs2)):
                 train_loss = train_Gs(model, graph_data, loss_fn, optimizer)
                 run_writer.add_scalar('Gs_train_loss', train_loss, epoch)
                 val_loss, val_acc, val_time = infer_Gs(model, graph_data, loss_fn, 'val')
@@ -186,7 +186,7 @@ if __name__ == "__main__":
                     torch.save(model.state_dict(), path+'/model.pt')
             
             #Test on Gs
-            model = model.load_state_dict(torch.load(path+'/model.pt')) 
+            model.load_state_dict(torch.load(path+'/model.pt'))# changed from model = model.load_state_dict(torch.load(path+'/model.pt')) -> model.load_state_dict(torch.load(path+'/model.pt'))
             test_loss, test_acc, test_time = infer_Gs(model, graph_data, loss_fn, 'test')
             writer.add_scalar('Gs_test_acc', test_acc, run)
             all_acc.append(test_acc)
@@ -207,7 +207,7 @@ if __name__ == "__main__":
                     torch.save(model.state_dict(), path+'/model.pt') 
 
             #Infer on Gs
-            model = model.load_state_dict(torch.load(path+'/model.pt'))      
+            model.load_state_dict(torch.load(path+'/model.pt')) # changed from model = model.load_state_dict(torch.load(path+'/model.pt')) -> model.load_state_dict(torch.load(path+'/model.pt'))
             val_loss, val_acc, val_time = infer_Gs(model, graph_data, loss_fn, 'val')
             run_writer.add_scalar('Gs_val_loss', val_loss, 0)
             run_writer.add_scalar('Gs_val_acc', val_acc, 0)
@@ -219,7 +219,7 @@ if __name__ == "__main__":
         elif args.exp_setup == 'Gs_train_2_Gs_infer':
             best_val_loss_Gs =  float('inf')
             #Train on Gs
-            for epoch in range(args.epochs2):
+            for epoch in tqdm(range(args.epochs2)):
                 train_loss = train_Gs(model, graph_data, loss_fn, optimizer)
                 run_writer.add_scalar('Gs_train_loss', train_loss, epoch)
                 val_loss, val_acc, val_time = infer_Gs(model, graph_data, loss_fn, 'val')
@@ -231,7 +231,7 @@ if __name__ == "__main__":
                     torch.save(model.state_dict(), path+'/model.pt')
             
             #Test on Gs
-            model = model.load_state_dict(torch.load(path+'/model.pt')) 
+            model.load_state_dict(torch.load(path+'/model.pt')) # changed from model = model.load_state_dict(torch.load(path+'/model.pt')) -> model.load_state_dict(torch.load(path+'/model.pt'))
             test_loss, test_acc, test_time = infer_Gs(model, graph_data, loss_fn, 'test')
             writer.add_scalar('Gs_test_acc', test_acc, run)
             all_acc.append(test_acc)
@@ -241,10 +241,10 @@ if __name__ == "__main__":
 
     if not os.path.exists(f"results/{args.dataset}.csv"):
         with open(f"results/{args.dataset}.csv", 'w') as f:
-            f.write('dataset,coarsening_method,coarsening_ratio,experiment,exp_setup,extra_nodes,cluster_node,hidden,runs,num_layers,batch_size,lr,ave_acc,ave_time,top_10_acc\n')
+            f.write('dataset,coarsening_method,coarsening_ratio,experiment,exp_setup,extra_nodes,cluster_node,hidden,runs,num_layers,batch_size,lr,ave_acc,ave_time,top_10_acc,best_acc\n')
 
     with open(f"results/{args.dataset}.csv", 'a') as f:
-        f.write(f"{args.dataset},{args.coarsening_method},{args.coarsening_ratio},{args.experiment},{args.exp_setup},{args.extra_node},{args.cluster_node},{args.hidden},{args.runs},{args.num_layers1},{args.batch_size},{args.lr},{np.mean(all_acc)} +/- {np.std(all_acc)},{np.mean(all_time)},{np.mean(top_acc)} +/- {np.std(top_acc)}\n")
+        f.write(f"{args.dataset},{args.coarsening_method},{args.coarsening_ratio},{args.experiment},{args.exp_setup},{args.extra_node},{args.cluster_node},{args.hidden},{args.runs},{args.num_layers1},{args.batch_size},{args.lr},{np.mean(all_acc)} +/- {np.std(all_acc)},{np.mean(all_time)},{np.mean(top_acc)} +/- {np.std(top_acc)}, {top_acc[0]}\n")
     print("#####################################################################")
     print(f"dataset: {args.dataset}")
     print(f"experiment: {args.experiment}")
