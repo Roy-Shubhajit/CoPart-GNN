@@ -8,7 +8,7 @@ from network import Net1
 import torch.nn.functional as F
 from torch_geometric.loader import DataLoader
 from torch.utils.tensorboard import SummaryWriter
-from utils import load_data, coarsening, create_distribution_tensor
+from utils import load_data, coarsening_classification, coarsening_regression, create_distribution_tensor
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -38,22 +38,26 @@ def val_Gc(model, x, edge_index, mask, y, loss_fn):
 def train_Gs(model, graph_data, loss_fn, optimizer):
     total_loss = 0
     n = 0
+    all_out = torch.tensor([], dtype=torch.float32).to(device)
+    all_label = torch.tensor([], dtype=torch.float32).to(device)
+    model.train()
+    optimizer.zero_grad()
     for graph in graph_data:
         train_mask = graph.train_mask.to(device)
         if True in train_mask:
-            model.train()
-            optimizer.zero_grad()
             x = graph.x.to(device)
             y = graph.y.to(device)
             edge_index = graph.edge_index.to(device)
             out = model(x, edge_index)
-            loss = loss_fn(out[train_mask], y[train_mask])
-            loss.backward()
-            optimizer.step()
-            total_loss += loss.item()
+            all_out = torch.cat((all_out, out[train_mask]), dim=0)
+            all_label = torch.cat((all_label, y[train_mask]), dim=0)
         else:
             continue
         n = n + 1 # ADDED. ZeroDivisionError was being raised
+    loss = loss_fn(all_out, all_label)
+    loss.backward()
+    optimizer.step()
+    total_loss += loss.item()
     return total_loss / n
 
 def infer_Gs(model, graph_data, loss_fn, infer_type):
@@ -92,7 +96,7 @@ def infer_Gs(model, graph_data, loss_fn, infer_type):
             else:
                 continue
         n = n + 1
-    
+
     return total_loss / n, int(all_out.eq(all_label).sum().item()) / int(all_label.shape[0]), total_time
 
 def arg_correction(args):
@@ -141,8 +145,9 @@ if __name__ == "__main__":
         os.makedirs(path)
     writer = SummaryWriter(path)
 
-    args.num_features, args.num_classes, candidate, C_list, Gc_list, subgraph_list = coarsening(args, 1-args.coarsening_ratio, args.coarsening_method)
-
+    args.num_features, args.num_classes, candidate, C_list, Gc_list, subgraph_list = coarsening_classification(args, 1-args.coarsening_ratio, args.coarsening_method)
+    
+    all_loss = []
     all_acc = []
     all_time = []
 
@@ -152,12 +157,12 @@ if __name__ == "__main__":
         if args.normalize_features:
             coarsen_features = F.normalize(coarsen_features, p=1)
         graph_data = DataLoader(graphs, batch_size=args.batch_size, shuffle=False)
-
+       
         model = Net1(args).to(device)
+        loss_fn = torch.nn.NLLLoss().to(device)
         model.reset_parameters()
         optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
-        loss_fn = torch.nn.NLLLoss().to(device)
-
+        
         if args.exp_setup == 'Gc_train_2_Gs_train':
             best_val_loss_Gc =  float('inf')
             best_val_loss_Gs =  float('inf')
@@ -188,7 +193,10 @@ if __name__ == "__main__":
             #Test on Gs
             model.load_state_dict(torch.load(path+'/model.pt'))# changed from model = model.load_state_dict(torch.load(path+'/model.pt')) -> model.load_state_dict(torch.load(path+'/model.pt'))
             test_loss, test_acc, test_time = infer_Gs(model, graph_data, loss_fn, 'test')
+            
+            writer.add_scalar('Gs_test_loss', test_loss, run)
             writer.add_scalar('Gs_test_acc', test_acc, run)
+            all_loss.append(test_loss)
             all_acc.append(test_acc)
             all_time.append(test_time)
         
@@ -213,6 +221,8 @@ if __name__ == "__main__":
             run_writer.add_scalar('Gs_val_acc', val_acc, 0)
             test_loss, test_acc, test_time = infer_Gs(model, graph_data, loss_fn, 'test')
             writer.add_scalar('Gs_test_acc', test_acc, run)
+            writer.add_scalar('Gs_test_loss', test_loss, run)
+            all_loss.append(test_loss)
             all_acc.append(test_acc)
             all_time.append(test_time)
 
@@ -233,18 +243,21 @@ if __name__ == "__main__":
             #Test on Gs
             model.load_state_dict(torch.load(path+'/model.pt')) # changed from model = model.load_state_dict(torch.load(path+'/model.pt')) -> model.load_state_dict(torch.load(path+'/model.pt'))
             test_loss, test_acc, test_time = infer_Gs(model, graph_data, loss_fn, 'test')
+            writer.add_scalar('Gs_test_loss', test_loss, run)
             writer.add_scalar('Gs_test_acc', test_acc, run)
+            all_loss.append(test_loss)
             all_acc.append(test_acc)
             all_time.append(test_time)
 
     top_acc = sorted(all_acc, reverse=True)[:10]
+    top_loss = sorted(all_loss)[:10]
 
     if not os.path.exists(f"results/{args.dataset}.csv"):
         with open(f"results/{args.dataset}.csv", 'w') as f:
-            f.write('dataset,coarsening_method,coarsening_ratio,experiment,exp_setup,extra_nodes,cluster_node,hidden,runs,num_layers,batch_size,lr,ave_acc,ave_time,top_10_acc,best_acc\n')
+            f.write('dataset,coarsening_method,coarsening_ratio,experiment,exp_setup,extra_nodes,cluster_node,hidden,runs,num_layers,batch_size,lr,ave_acc,ave_time,top_10_acc,best_acc,top_10_loss,best_loss\n')
 
     with open(f"results/{args.dataset}.csv", 'a') as f:
-        f.write(f"{args.dataset},{args.coarsening_method},{args.coarsening_ratio},{args.experiment},{args.exp_setup},{args.extra_node},{args.cluster_node},{args.hidden},{args.runs},{args.num_layers1},{args.batch_size},{args.lr},{np.mean(all_acc)} +/- {np.std(all_acc)},{np.mean(all_time)},{np.mean(top_acc)} +/- {np.std(top_acc)}, {top_acc[0]}\n")
+        f.write(f"{args.dataset},{args.coarsening_method},{args.coarsening_ratio},{args.experiment},{args.exp_setup},{args.extra_node},{args.cluster_node},{args.hidden},{args.runs},{args.num_layers1},{args.batch_size},{args.lr},{np.mean(all_acc)} +/- {np.std(all_acc)},{np.mean(all_time)},{np.mean(top_acc)} +/- {np.std(top_acc)}, {top_acc[0]}, {np.mean(top_loss)} +/- {np.std(top_loss)}, {top_loss[0]}\n")
     print("#####################################################################")
     print(f"dataset: {args.dataset}")
     print(f"experiment: {args.experiment}")
@@ -261,4 +274,7 @@ if __name__ == "__main__":
     print(f"ave_acc: {np.mean(all_acc)} +/- {np.std(all_acc)}")
     print(f"ave_time: {np.mean(all_time)}")
     print(f"top_10_acc: {np.mean(top_acc)} +/- {np.std(top_acc)}")
+    print(f"best_acc: {top_acc[0]}")
+    print(f"top_10_loss: {np.mean(top_loss)} +/- {np.std(top_loss)}")
+    print(f"best_loss: {top_loss[0]}")
     print("#####################################################################")
