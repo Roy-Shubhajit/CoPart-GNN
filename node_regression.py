@@ -30,7 +30,7 @@ def train_Gs(model, graph_data, loss_fn, optimizer):
             all_label = torch.cat((all_label, y[train_mask]), dim=0)
         else:
             continue
-        n = n + 1 # ADDED. ZeroDivisionError was being raised
+        n = n + 1
     loss = loss_fn(all_out, all_label)
     loss.backward()
     optimizer.step()
@@ -92,7 +92,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--dataset', type=str, default='cora')
     parser.add_argument('--experiment', type=str, default='fixed') #'fixed', 'random', 'few'
-    parser.add_argument('--runs', type=int, default=50)
+    parser.add_argument('--runs', type=int, default=20) ##### 50 RUNS -> 20 RUNS
     parser.add_argument('--exp_setup', type=str, default='Gc_train_2_Gs_train') #'Gc_train_2_Gs_train', 'Gc_train_2_Gs_infer', 'Gs_train_2_Gs_infer'
     parser.add_argument('--hidden', type=int, default=512)
     parser.add_argument('--epochs1', type=int, default=100)
@@ -116,14 +116,17 @@ if __name__ == "__main__":
 
     args = arg_correction(args)
 
-    path = "save/"+args.output_dir+"/"
+    path = "save/node_regr/"+args.output_dir+"/" 
     if not os.path.exists('save'):
         os.makedirs('save')
     if not os.path.exists(path):
         os.makedirs(path)
     writer = SummaryWriter(path)
 
-    args.num_features, candidate, C_list, Gc_list, subgraph_list, comp_node_2_meta_node_list = coarsening_regression((args, 1-args.coarsening_ratio, args.coarsening_method))
+    if args.super_graph:
+        args.num_features, candidate, C_list, Gc_list, subgraph_list, comp_node_2_meta_node_list = coarsening_regression(args, 1-args.coarsening_ratio, args.coarsening_method)
+    else:
+        args.num_features, candidate, C_list, Gc_list, subgraph_list = coarsening_regression(args, 1-args.coarsening_ratio, args.coarsening_method) ##### ADDED IF-ELSE BLOCK AS RETURNS OF coarsening_regression() ARE OF TWO TYPES
     
     all_loss = []
     all_acc = []
@@ -131,9 +134,9 @@ if __name__ == "__main__":
 
     for run in range(args.runs):
         run_writer = SummaryWriter(path + "/run_"+str(run+1))
-        graphs = load_data_regression(args, args.dataset, candidate, C_list, Gc_list, args.experiment, subgraph_list)
-        if args.normalize_features:
-            coarsen_features = F.normalize(coarsen_features, p=1)
+        graphs = load_data_regression(args, args.dataset, subgraph_list)
+        # if args.normalize_features:
+        #     coarsen_features = F.normalize(coarsen_features, p=1)                 ##### REMOVED NORMALIZATION AS coarsen_features NOT DECLARED BEFORE
         graph_data = DataLoader(graphs, batch_size=args.batch_size, shuffle=False)
 
         model = Net2(args).to(device)
@@ -155,7 +158,7 @@ if __name__ == "__main__":
                 torch.save(model.state_dict(), path+'/model.pt')
         
         #Test on Gs
-        model.load_state_dict(torch.load(path+'/model.pt')) # changed from model = model.load_state_dict(torch.load(path+'/model.pt')) -> model.load_state_dict(torch.load(path+'/model.pt'))
+        model.load_state_dict(torch.load(path+'/model.pt'))
         test_loss, test_acc, test_time = infer_Gs(model, graph_data, loss_fn, 'test')
         writer.add_scalar('Gs_test_loss', test_loss, run)
         writer.add_scalar('Gs_test_acc', test_acc, run)

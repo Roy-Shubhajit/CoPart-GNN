@@ -1,0 +1,3 @@
+dataset,coarsening_method,coarsening_ratio,experiment,exp_setup,extra_nodes,cluster_node,hidden,runs,num_layers,batch_size,lr,ave_acc,ave_time,top_10_acc,best_acc,top_10_loss,best_loss
+chameleon,variation_neighborhoods,0.1,fixed,Gs_train_2_Gs_infer,True,False,512,20,2,128,0.01,0.0 +/- 0.0,0.008791208267211914,0.0 +/- 0.0,0,4.232071805000305 +/- 0.08269282303705346,4.074267625808716
+chameleon,variation_neighborhoods,0.1,fixed,Gc_train_2_Gs_infer,True,False,512,20,2,128,0.01,0.0 +/- 0.0,0.010558497905731202,0.0 +/- 0.0, 0, 4.225790703296662 +/- 0.05442530862517627, 4.13909912109375
