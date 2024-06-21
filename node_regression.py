@@ -74,7 +74,7 @@ def infer_Gs(model, graph_data, loss_fn, infer_type):
                 continue
         n = n + 1
     loss = loss_fn(all_out.view(-1, 1), all_label.view(-1, 1))
-    total_loss += loss.item()/torch.var(all_out).item()
+    total_loss += loss.item()/torch.std(all_label).item()
     return total_loss / n, 0, total_time
 
 def arg_correction(args):
@@ -118,7 +118,7 @@ if __name__ == "__main__":
 
     args = arg_correction(args)
 
-    path = "save/node_regr_2/"+args.output_dir+"/" 
+    path = "save/node_regr_3/"+args.output_dir+"/" 
     if not os.path.exists('save'):
         os.makedirs('save')
     if not os.path.exists(path):
@@ -171,11 +171,11 @@ if __name__ == "__main__":
     top_acc = sorted(all_acc, reverse=True)[:10]
     top_loss = sorted(all_loss)[:10]
 
-    if not os.path.exists(f"results_2/{args.dataset}.csv"):
-        with open(f"results_2/{args.dataset}.csv", 'w') as f:
+    if not os.path.exists(f"results_3/{args.dataset}.csv"):
+        with open(f"results_3/{args.dataset}.csv", 'w') as f:
             f.write('dataset,coarsening_method,coarsening_ratio,experiment,exp_setup,extra_nodes,cluster_node,hidden,runs,num_layers,batch_size,lr,ave_time,top_10_loss,best_loss\n')
 
-    with open(f"results_2/{args.dataset}.csv", 'a') as f:
+    with open(f"results_3/{args.dataset}.csv", 'a') as f:
         f.write(f"{args.dataset},{args.coarsening_method},{args.coarsening_ratio},{args.experiment},{args.exp_setup},{args.extra_node},{args.cluster_node},{args.hidden},{args.runs},{args.num_layers1},{args.batch_size},{args.lr},{np.mean(all_time)},{np.mean(top_loss)} +/- {np.std(top_loss)},{top_loss[0]}\n")
     print("#####################################################################")
     print(f"dataset: {args.dataset}")
