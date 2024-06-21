@@ -2,9 +2,9 @@ underscore="_"
 extra="extra"
 cluster="cluster"
 coarsening_method="variation_neighborhoods"
-for dataset in chameleon squirrel crocodile
+for dataset in squirrel
 do
-    for coarsening_ratio in 0.1 0.3 0.5 0.7 0.9
+    for coarsening_ratio in 0.9
     do 
         for exp_setup in Gs_train_2_Gs_infer
         do 
