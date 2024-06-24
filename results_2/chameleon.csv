@@ -1,7 +1,0 @@
-dataset,coarsening_method,coarsening_ratio,experiment,exp_setup,extra_nodes,cluster_node,hidden,runs,num_layers,batch_size,lr,ave_time,top_10_loss,best_loss
-chameleon,variation_neighborhoods,0.1,fixed,Gs_train_2_Gs_infer,False,True,512,20,2,128,0.01,0.005150723457336426,0.13677815661352355 +/- 0.005474351246284373,0.12955146429027026
-chameleon,variation_neighborhoods,0.1,fixed,Gs_train_2_Gs_infer,True,False,512,20,2,128,0.01,0.006094789505004883,0.07427230384457821 +/- 0.0036513511709789044,0.06906228735560677
-chameleon,variation_neighborhoods,0.3,fixed,Gs_train_2_Gs_infer,False,True,512,20,2,128,0.01,0.011144757270812988,0.037944027948927865 +/- 0.0007418920203274717,0.036864750700783606
-chameleon,variation_neighborhoods,0.3,fixed,Gs_train_2_Gs_infer,True,False,512,20,2,128,0.01,0.013478970527648926,0.028551150187297807 +/- 0.0016205058680721033,0.02477642196737062
-chameleon,variation_neighborhoods,0.5,fixed,Gs_train_2_Gs_infer,False,True,512,20,2,128,0.01,0.015739262104034424,0.025797235154943542 +/- 0.0015499776974308617,0.02374362986116786
-chameleon,variation_neighborhoods,0.5,fixed,Gs_train_2_Gs_infer,True,False,512,20,2,128,0.01,0.019335365295410155,0.021691361440451685 +/- 0.0006091984985174076,0.020136852689751548

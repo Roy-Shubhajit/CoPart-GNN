@@ -1,2 +1,0 @@
-dataset,coarsening_method,coarsening_ratio,experiment,exp_setup,extra_nodes,cluster_node,hidden,runs,num_layers,batch_size,lr,ave_acc,ave_time,top_10_acc,best_acc,top_10_loss,best_loss
-crocodile,variation_neighborhoods,0.1,fixed,Gs_train_2_Gs_infer,True,False,512,20,2,128,0.01,0.0 +/- 0.0,0.06119927167892456,0.0 +/- 0.0, 0, 4.136647248268128 +/- 0.07787616680676528, 3.984401512145996
