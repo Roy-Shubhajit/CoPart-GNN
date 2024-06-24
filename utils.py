@@ -327,8 +327,8 @@ def coarsening_regression(args, coarsening_ratio, coarsening_method):
     number = 0
     C_list=[]
     Gc_list=[]
-    CLIST = [] # NEWLY ADDED (WORKS FOR CORA)
-    GcLIST = [] # NEWLY ADDED (WORKS FOR CORA)
+    CLIST = []
+    GcLIST = [] 
     subgraph_list=[]
     component_2_subgraphs = {}
     while number < len(candidate):
@@ -479,7 +479,7 @@ def splits_classification(data, num_classes, exp):
 def splits_regression(data, train_ratio, val_ratio):
     if train_ratio + val_ratio >= 1:
         raise ValueError('train_ratio + val_ratio should be less than 1')
-    num_nodes = len(data.x.shape[0])
+    num_nodes = data.x.shape[0]
     num_train = int(train_ratio*num_nodes)
     num_val = int(val_ratio*num_nodes)
     perm_nodes = torch.randperm(num_nodes)
@@ -635,7 +635,7 @@ def load_data_classification(args, dataset, candidate, C_list, Gc_list, exp, sub
 
     return coarsen_features, coarsen_train_labels, coarsen_train_mask, coarsen_val_labels, coarsen_val_mask, coarsen_edge, new_graphs
     
-def load_data_regression(args, dataset, candidate, C_list, Gc_list, exp, subgraph_list, comp_node_2_meta_node_list):
+def load_data_regression(args, dataset, subgraph_list):
     dataset = WikipediaNetwork(root='./dataset', name=dataset, geom_gcn_preprocess=False)
     data = splits_regression(dataset[0], args.train_ratio, args.val_ratio)
 
@@ -646,7 +646,7 @@ def load_data_regression(args, dataset, candidate, C_list, Gc_list, exp, subgrap
 
     if args.super_graph:
         for graph in subgraph_list:
-            F = Data(x=graph.x, edge_index=graph.edge_index, y=graph.y, num_classes=graph.num_classes)
+            F = Data(x=graph.x, edge_index=graph.edge_index, y=graph.y) # num_classes=graph.num_classes ##### REMOVED num_classes
             F.train_mask = torch.zeros(graph.x.shape[0], dtype=torch.bool)
             F.val_mask = torch.zeros(graph.x.shape[0], dtype=torch.bool)
             F.test_mask = torch.zeros(graph.x.shape[0], dtype=torch.bool)
@@ -665,7 +665,7 @@ def load_data_regression(args, dataset, candidate, C_list, Gc_list, exp, subgrap
 
     else:
         for graph in subgraph_list:
-            F = Data(x=graph.x, edge_index=graph.edge_index, y=graph.y, num_classes=graph.num_classes)
+            F = Data(x=graph.x, edge_index=graph.edge_index, y=graph.y) # num_classes=graph.num_classes ##### REMOVED num_classes
             F.train_mask = torch.zeros(graph.x.shape[0], dtype=torch.bool)
             F.val_mask = torch.zeros(graph.x.shape[0], dtype=torch.bool)
             F.test_mask = torch.zeros(graph.x.shape[0], dtype=torch.bool)

@@ -30,8 +30,8 @@ def train_Gs(model, graph_data, loss_fn, optimizer):
             all_label = torch.cat((all_label, y[train_mask]), dim=0)
         else:
             continue
-        n = n + 1 # ADDED. ZeroDivisionError was being raised
-    loss = loss_fn(all_out, all_label)
+        n = n + 1
+    loss = loss_fn(all_out.view(-1, 1), all_label.view(-1, 1))
     loss.backward()
     optimizer.step()
     total_loss += loss.item()
@@ -54,9 +54,9 @@ def infer_Gs(model, graph_data, loss_fn, infer_type):
                 out = model(x, edge_index)
                 total_time += time.time() - start_time
                 test_mask = graph.test_mask.to(device)
-                loss = loss_fn(out[test_mask], y[test_mask])
-                total_loss += loss.item()
-                all_out = torch.cat((all_out, torch.max(out[test_mask], dim=1)[1].to(device)), dim=0)
+                # loss = loss_fn(out[test_mask], y[test_mask])
+                # total_loss += loss.item()
+                all_out = torch.cat((all_out, out[test_mask]), dim=0)
                 all_label = torch.cat((all_label, y[test_mask]), dim=0)
             else:
                 continue
@@ -66,13 +66,15 @@ def infer_Gs(model, graph_data, loss_fn, infer_type):
                 out = model(x, edge_index)
                 total_time += time.time() - start_time
                 val_mask = graph.val_mask.to(device)
-                loss = loss_fn(out[val_mask], y[val_mask])
-                total_loss += loss.item()
-                all_out = torch.cat((all_out, torch.max(out[val_mask], dim=1)[1].to(device)), dim=0)
+                # loss = loss_fn(out[val_mask], y[val_mask])
+                # total_loss += loss.item()
+                all_out = torch.cat((all_out, out[val_mask]), dim=0)
                 all_label = torch.cat((all_label, y[val_mask]), dim=0)
             else:
                 continue
         n = n + 1
+    loss = loss_fn(all_out.view(-1, 1), all_label.view(-1, 1))
+    total_loss += loss.item()/torch.std(all_label).item()
     return total_loss / n, 0, total_time
 
 def arg_correction(args):
@@ -90,10 +92,10 @@ def arg_correction(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('--dataset', type=str, default='cora')
+    parser.add_argument('--dataset', type=str, default='chameleon')
     parser.add_argument('--experiment', type=str, default='fixed') #'fixed', 'random', 'few'
-    parser.add_argument('--runs', type=int, default=50)
-    parser.add_argument('--exp_setup', type=str, default='Gc_train_2_Gs_train') #'Gc_train_2_Gs_train', 'Gc_train_2_Gs_infer', 'Gs_train_2_Gs_infer'
+    parser.add_argument('--runs', type=int, default=20) ##### 50 RUNS -> 20 RUNS
+    parser.add_argument('--exp_setup', type=str, default='Gc_train_2_Gs_infer') # 'Gc_train_2_Gs_infer', 'Gs_train_2_Gs_infer'
     parser.add_argument('--hidden', type=int, default=512)
     parser.add_argument('--epochs1', type=int, default=100)
     parser.add_argument('--epochs2', type=int, default=300)
@@ -116,14 +118,17 @@ if __name__ == "__main__":
 
     args = arg_correction(args)
 
-    path = "save/"+args.output_dir+"/"
+    path = "save/node_regr_3/"+args.output_dir+"/" 
     if not os.path.exists('save'):
         os.makedirs('save')
     if not os.path.exists(path):
         os.makedirs(path)
     writer = SummaryWriter(path)
 
-    args.num_features, candidate, C_list, Gc_list, subgraph_list, comp_node_2_meta_node_list = coarsening_regression((args, 1-args.coarsening_ratio, args.coarsening_method))
+    if args.super_graph:
+        args.num_features, candidate, C_list, Gc_list, subgraph_list, comp_node_2_meta_node_list = coarsening_regression(args, 1-args.coarsening_ratio, args.coarsening_method)
+    else:
+        args.num_features, candidate, C_list, Gc_list, subgraph_list = coarsening_regression(args, 1-args.coarsening_ratio, args.coarsening_method) ##### ADDED IF-ELSE BLOCK AS RETURNS OF coarsening_regression() ARE OF TWO TYPES
     
     all_loss = []
     all_acc = []
@@ -131,13 +136,13 @@ if __name__ == "__main__":
 
     for run in range(args.runs):
         run_writer = SummaryWriter(path + "/run_"+str(run+1))
-        graphs = load_data_regression(args, args.dataset, candidate, C_list, Gc_list, args.experiment, subgraph_list)
-        if args.normalize_features:
-            coarsen_features = F.normalize(coarsen_features, p=1)
+        graphs = load_data_regression(args, args.dataset, subgraph_list)
+        # if args.normalize_features:
+        #     coarsen_features = F.normalize(coarsen_features, p=1)                 ##### REMOVED NORMALIZATION AS coarsen_features NOT DECLARED BEFORE
         graph_data = DataLoader(graphs, batch_size=args.batch_size, shuffle=False)
 
         model = Net2(args).to(device)
-        loss_fn = torch.nn.MSELoss().to(device)
+        loss_fn = torch.nn.L1Loss().to(device)
         model.reset_parameters()
         optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
         
@@ -155,7 +160,7 @@ if __name__ == "__main__":
                 torch.save(model.state_dict(), path+'/model.pt')
         
         #Test on Gs
-        model.load_state_dict(torch.load(path+'/model.pt')) # changed from model = model.load_state_dict(torch.load(path+'/model.pt')) -> model.load_state_dict(torch.load(path+'/model.pt'))
+        model.load_state_dict(torch.load(path+'/model.pt'))
         test_loss, test_acc, test_time = infer_Gs(model, graph_data, loss_fn, 'test')
         writer.add_scalar('Gs_test_loss', test_loss, run)
         writer.add_scalar('Gs_test_acc', test_acc, run)
@@ -166,12 +171,12 @@ if __name__ == "__main__":
     top_acc = sorted(all_acc, reverse=True)[:10]
     top_loss = sorted(all_loss)[:10]
 
-    if not os.path.exists(f"results/{args.dataset}.csv"):
-        with open(f"results/{args.dataset}.csv", 'w') as f:
-            f.write('dataset,coarsening_method,coarsening_ratio,experiment,exp_setup,extra_nodes,cluster_node,hidden,runs,num_layers,batch_size,lr,ave_acc,ave_time,top_10_acc,best_acc,top_10_loss,best_loss\n')
+    if not os.path.exists(f"results_3/{args.dataset}.csv"):
+        with open(f"results_3/{args.dataset}.csv", 'w') as f:
+            f.write('dataset,coarsening_method,coarsening_ratio,experiment,exp_setup,extra_nodes,cluster_node,hidden,runs,num_layers,batch_size,lr,ave_time,top_10_loss,best_loss\n')
 
-    with open(f"results/{args.dataset}.csv", 'a') as f:
-        f.write(f"{args.dataset},{args.coarsening_method},{args.coarsening_ratio},{args.experiment},{args.exp_setup},{args.extra_node},{args.cluster_node},{args.hidden},{args.runs},{args.num_layers1},{args.batch_size},{args.lr},{np.mean(all_acc)} +/- {np.std(all_acc)},{np.mean(all_time)},{np.mean(top_acc)} +/- {np.std(top_acc)}, {top_acc[0]}, {np.mean(top_loss)} +/- {np.std(top_loss)}, {top_loss[0]}\n")
+    with open(f"results_3/{args.dataset}.csv", 'a') as f:
+        f.write(f"{args.dataset},{args.coarsening_method},{args.coarsening_ratio},{args.experiment},{args.exp_setup},{args.extra_node},{args.cluster_node},{args.hidden},{args.runs},{args.num_layers1},{args.batch_size},{args.lr},{np.mean(all_time)},{np.mean(top_loss)} +/- {np.std(top_loss)},{top_loss[0]}\n")
     print("#####################################################################")
     print(f"dataset: {args.dataset}")
     print(f"experiment: {args.experiment}")
@@ -185,10 +190,7 @@ if __name__ == "__main__":
     print(f"lr: {args.lr}")
     print(f"coarsening_ratio: {args.coarsening_ratio}")
     print(f"coarsening_method: {args.coarsening_method}")
-    print(f"ave_acc: {np.mean(all_acc)} +/- {np.std(all_acc)}")
     print(f"ave_time: {np.mean(all_time)}")
-    print(f"top_10_acc: {np.mean(top_acc)} +/- {np.std(top_acc)}")
-    print(f"best_acc: {top_acc[0]}")
     print(f"top_10_loss: {np.mean(top_loss)} +/- {np.std(top_loss)}")
     print(f"best_loss: {top_loss[0]}")
     print("#####################################################################")
