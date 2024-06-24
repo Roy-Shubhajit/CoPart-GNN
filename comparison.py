@@ -17,14 +17,14 @@ for i, dataset_name in enumerate(datasets):
     xticks = [f"{data[i]['coarsening_ratio'][j]}_{data[i]['extra_nodes'][j]}" for j in range(len(data[i]["coarsening_ratio"]))]
 
     plt.figure(figsize=(8,8))
-    plt.errorbar(np.arange(len(data[i]["coarsening_ratio"])), losses, yerr=errors)
-    plt.plot(np.arange(len(data[i]["coarsening_ratio"])), baseline_loss * np.ones(len(data[i]["coarsening_ratio"])))
+    plt.errorbar(np.arange(len(data[i]["coarsening_ratio"])), losses, yerr=errors, label = "Coarsening")
+    plt.plot(np.arange(len(data[i]["coarsening_ratio"])), baseline_loss * np.ones(len(data[i]["coarsening_ratio"])), label = "Baseline")
     plt.title(f"{dataset_name} Top 10 Loss")
     plt.xticks(np.arange(len(data[i]["coarsening_ratio"])), xticks, rotation = 45)
     plt.xlabel("Coarsening Ratio_Extra Nodes")
     plt.ylabel("Top 10 Loss")
     plt.grid(alpha = 0.5)
-    plt.legend(["Coarsening", "Baseline"])
+    plt.legend()
     plt.savefig(f"./plots/{dataset_name}_top_10_loss.png")
     plt.close()
 
