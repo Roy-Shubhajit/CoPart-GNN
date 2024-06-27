@@ -4,7 +4,7 @@ from torch_geometric.utils import to_dense_adj
 from graph_coarsening.coarsening_utils import *
 from torch_geometric.datasets import Coauthor
 from torch_geometric.datasets import CitationFull
-from torch_geometric.datasets import WikipediaNetwork
+from torch_geometric.datasets import WikipediaNetwork, TUDataset
 from torch_geometric.data import Data
 from torch_geometric.loader import DataLoader
 from torch_geometric.utils import subgraph
@@ -687,3 +687,134 @@ def load_data_regression(args, dataset, subgraph_list):
             new_graphs.append(F)
 
     return new_graphs
+
+def graph_coarsening_classification(args, coarsening_ratio, coarsening_method):
+    dataset = TUDataset(root='./dataset', name=args.dataset, use_node_attr=True)
+    num_classes = dataset.num_classes
+    for graph in dataset:
+        if args.normalize_features:
+            graph.x = torch.nn.functional.normalize(graph.x, p=1)
+        G = gsp.graphs.Graph(W=to_dense_adj(graph.edge_index)[0])
+        components = extract_components(G)
+        candidate = sorted(components, key=lambda x: len(x.info['orig_idx']), reverse=True)
+        number = 0
+        C_list=[]
+        Gc_list=[]
+        CLIST = []
+        GcLIST = []
+        comp_node_2_meta_node_list = []
+        subgraph_list=[]
+        component_2_subgraphs = {}
+        while number < len(candidate):
+            H = candidate[number]
+            new_subgraph_list = []
+            H_feature = graph.x[H.info['orig_idx']]
+            comp_node_2_node, node_2_comp_node = orig_to_new_map(H.info['orig_idx'])
+            if len(H.info['orig_idx']) > 1:
+                C, Gc, mapping_dict_list = coarsen(H, r=coarsening_ratio, method=coarsening_method)
+                adj = Gc.A
+                C_dot_H_feature = C.dot(H_feature)
+                CLIST.append(C)
+                GcLIST.append(Gc)
+                if len(H.info['orig_idx']) > 10:
+                    C_list.append(C)
+                    Gc_list.append(Gc)
+                comp_node_2_meta_node = subgraph_mapping(mapping_dict_list)
+                meta_node_2_node = metanode_to_node_mapping_new(comp_node_2_meta_node, comp_node_2_node)
+                for key, value in meta_node_2_node.items():
+                    value = np.sort(value)
+                    node_2_subgraph_node = {v.item(): i for i, v in enumerate(value)}
+                    actual_ext = np.array([], dtype=np.compat.long)
+                    num_nodes = len(value)
+                    if args.cluster_node:
+                        new_edges = np.array([], dtype=np.compat.long)
+                        new_features = np.array([])
+                        meta_node_2_new_node = {}
+                        for node in value:
+                            N_node = neighbour(graph, node)
+                            Nt_node = N_node[~np.isin(N_node, value)]
+                            connected_clusters = neighbor_2_cluster(Nt_node, node_2_comp_node, comp_node_2_meta_node)
+                            for cluster in connected_clusters:
+                                if cluster not in meta_node_2_new_node.keys():
+                                    meta_node_2_new_node[cluster] = np.array([num_nodes])
+                                    if len(actual_ext.shape) <= 1:
+                                        actual_ext = np.concatenate((actual_ext, meta_node_2_new_node[cluster]), axis=0)
+                                        actual_ext = actual_ext.reshape(1, 1)
+                                    else:
+                                        actual_ext = np.concatenate((actual_ext, meta_node_2_new_node[cluster].reshape(1,1)), axis=0)
+                                    new_feature = C_dot_H_feature[cluster]
+                                    if len(new_features.shape) <= 1:
+                                        new_features = new_feature
+                                        new_features = new_features.reshape(1, len(new_feature))
+                                    else:
+                                        new_features = np.concatenate((new_features, new_feature.reshape(1,-1)), axis=0)
+                                    num_nodes += 1
+                                e1 = np.array([node_2_subgraph_node[node], meta_node_2_new_node[cluster][0]], dtype=np.compat.long)
+                                e2 = np.array([meta_node_2_new_node[cluster][0], node_2_subgraph_node[node]], dtype=np.compat.long)
+                                if len(new_edges.shape) <= 1:
+                                    new_edges = np.concatenate((new_edges, e1), axis=0)
+                                    new_edges = new_edges.reshape(1, 2)
+                                    new_edges = np.concatenate((new_edges, e2.reshape(1,-1)), axis=0)
+                                else:
+                                    new_edges = np.concatenate((new_edges, e1.reshape(1,-1)), axis=0)
+                                    new_edges = np.concatenate((new_edges, e2.reshape(1,-1)), axis=0)
+
+                        if len(meta_node_2_new_node.keys()) > 1:
+                            cluster_keys = list(meta_node_2_new_node.keys())
+                            for i in range(len(cluster_keys)-1):
+                                for j in range(i+1, len(cluster_keys)):
+                                    if adj[cluster_keys[i], cluster_keys[j]] or adj[cluster_keys[j], cluster_keys[i]]:
+                                        e1 = np.array([meta_node_2_new_node[cluster_keys[i]][0], meta_node_2_new_node[cluster_keys[j]][0]], dtype=np.compat.long)
+                                        e2 = np.array([meta_node_2_new_node[cluster_keys[j]][0], meta_node_2_new_node[cluster_keys[i]][0]], dtype=np.compat.long)
+                                        new_edges = np.concatenate((new_edges, e1.reshape(1,-1)), axis=0)
+                                        new_edges = np.concatenate((new_edges, e2.reshape(1,-1)), axis=0)
+
+                    elif args.extra_node:
+                        extra_node = nodes_2_neighbours(graph, value)
+                        actual_ext = extra_node[~np.isin(extra_node, value)]
+                        value = np.concatenate((value, extra_node), 0)
+                        value = np.unique(value)
+
+                    value = np.sort(value)
+                    value = torch.tensor(value)
+                    mappiing = {}
+                    for i in range(len(value)):
+                        mappiing[value[i].item()] = i
+                    M = graph.subgraph(value)
+                    M.num_classes = num_classes
+                    M.actual_ext = actual_ext
+                    M.orig_idx = value
+                    M_t = Data(x = M.x, y = M.y, edge_index = M.edge_index, num_classes = M.num_classes, orig_idx = M.orig_idx)
+                    if args.cluster_node:
+                        M.x = torch.cat((M.x, torch.tensor(new_features).float()), dim=0)
+                        M.edge_index = torch.cat((M.edge_index.T, torch.tensor(new_edges, dtype=torch.long)), dim=0).T
+                        M.y = torch.cat((M.y, torch.zeros(len(new_features)).long()))
+                        for new_node in actual_ext:
+                            mappiing[new_node.item()] = new_node.item()
+                    M.map_dict = mappiing
+                    new_subgraph_list.append(M_t)
+                    subgraph_list.append(M)
+            else:
+                comp_node_2_meta_node = {0: 0}
+                comp_node_2_meta_node_list.append(comp_node_2_meta_node)
+                meta_node_2_node = metanode_to_node_mapping_new(comp_node_2_meta_node, comp_node_2_node)
+                for key, value in meta_node_2_node.items():
+                    value = torch.LongTensor(value)
+                    value, _ = torch.sort(value)
+                    actual_ext = torch.LongTensor([])
+                    M = graph.subgraph(value)
+                    M.num_classes = num_classes
+                    M.actual_ext = actual_ext
+                    M.orig_idx = value
+                    mappiing = {}
+                    for i in range(len(value)):
+                        mappiing[value[i].item()] = i
+                    M.map_dict = mappiing
+                    subgraph_list.append(M)
+                    M_t = Data(x = M.x, y = M.y, edge_index = M.edge_index, num_classes = M.num_classes, orig_idx = M.orig_idx)
+                    new_subgraph_list.append(M_t)
+            component_2_subgraphs[number] = new_subgraph_list
+            number += 1
+        
+
+

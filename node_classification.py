@@ -4,11 +4,11 @@ import torch
 import argparse
 import numpy as np
 from tqdm import tqdm
-from network import Net1
+from network import Classify_node
 import torch.nn.functional as F
 from torch_geometric.loader import DataLoader
 from torch.utils.tensorboard import SummaryWriter
-from utils import load_data, coarsening_classification, coarsening_regression, create_distribution_tensor
+from utils import load_data_classification, coarsening_classification, coarsening_regression, create_distribution_tensor
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -153,12 +153,12 @@ if __name__ == "__main__":
 
     for run in range(args.runs):
         run_writer = SummaryWriter(path + "/run_"+str(run+1))
-        coarsen_features, coarsen_train_labels, coarsen_train_mask, coarsen_val_labels, coarsen_val_mask, coarsen_edge, graphs = load_data(args, args.dataset, candidate, C_list, Gc_list, args.experiment, subgraph_list)
+        coarsen_features, coarsen_train_labels, coarsen_train_mask, coarsen_val_labels, coarsen_val_mask, coarsen_edge, graphs = load_data_classification(args, args.dataset, candidate, C_list, Gc_list, args.experiment, subgraph_list)
         if args.normalize_features:
             coarsen_features = F.normalize(coarsen_features, p=1)
         graph_data = DataLoader(graphs, batch_size=args.batch_size, shuffle=False)
        
-        model = Net1(args).to(device)
+        model = Classify_node(args).to(device)
         loss_fn = torch.nn.NLLLoss().to(device)
         model.reset_parameters()
         optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
